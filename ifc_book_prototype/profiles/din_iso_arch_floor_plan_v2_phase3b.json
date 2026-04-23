@@ -1,5 +1,5 @@
 {
-  "profile_id": "din_iso_arch_floor_plan_v1",
+  "profile_id": "din_iso_arch_floor_plan_v2_phase3b",
   "region": "DIN/ISO",
   "page": {
     "width_mm": 210.0,
@@ -27,7 +27,7 @@
       "IfcWindow",
       "IfcStair"
     ],
-    "cut_classes": ["IfcWall", "IfcSlab"],
+    "cut_classes": ["IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", "IfcMember"],
     "occt_per_element_budget_s": 2.0,
     "cut_chord_tolerance_m": 0.0005,
     "highlight_fallback_lines": false,

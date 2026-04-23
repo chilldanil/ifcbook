@@ -7,7 +7,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from xml.etree import ElementTree
 
 from ._ifc_index import build_storey_elevations, index_elements_by_storey
-from .domain import Bounds2D, GeometrySummary, Point2D, PlannedView, VectorPath, VectorPolygon
+from .domain import Bounds2D, GeometrySummary, PlannedView, Point2D, VectorPath, VectorPolygon
+from .feature_anchors import build_feature_anchors_by_storey, count_feature_anchors
 
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -103,11 +104,23 @@ class IfcSerializerPlanBackend:
             self.included_classes,
             self._get_container,
         )
+        self._feature_anchors_by_storey = build_feature_anchors_by_storey(
+            self._model,
+            self._unit_scale,
+            self._get_container,
+        )
+        self._feature_anchors_by_storey = build_feature_anchors_by_storey(
+            self._model,
+            self._unit_scale,
+            self._get_container,
+        )
         self._storey_linework = self._build_storey_linework()
 
     def build_view(self, view: PlannedView) -> GeometrySummary:
         storey_linework = self._storey_linework.get(view.storey_name)
         indexed_elements = len(self._elements_by_storey.get(view.storey_name, []))
+        feature_anchors = list(self._feature_anchors_by_storey.get(view.storey_name, []))
+        feature_anchor_counts = count_feature_anchors(feature_anchors)
         if storey_linework is None:
             notes = [
                 "IfcOpenShell SVG floorplan serializer did not return a matching storey group for this view.",
@@ -119,10 +132,12 @@ class IfcSerializerPlanBackend:
                 projection_candidates={},
                 source_elements=indexed_elements,
                 path_count=0,
-                bounds=None,
+                bounds=_bounds_from_feature_anchors(feature_anchors),
                 paths=[],
                 polygons=[],
                 notes=notes,
+                feature_anchors=feature_anchors,
+                feature_anchor_counts=feature_anchor_counts,
             )
 
         source_elements = max(indexed_elements, storey_linework.classified_groups)
@@ -133,10 +148,12 @@ class IfcSerializerPlanBackend:
             projection_candidates=dict(sorted(storey_linework.projection_counts.items())),
             source_elements=source_elements,
             path_count=len(storey_linework.paths),
-            bounds=storey_linework.bounds,
+            bounds=storey_linework.bounds or _bounds_from_feature_anchors(feature_anchors),
             paths=storey_linework.paths,
             polygons=[],
             notes=list(storey_linework.notes),
+            feature_anchors=feature_anchors,
+            feature_anchor_counts=feature_anchor_counts,
         )
 
     def _build_storey_linework(self) -> Dict[str, _PreparedStoreyLinework]:
@@ -306,6 +323,7 @@ class IfcMeshPlanBackend:
         ]
         if skipped:
             notes.append(f"Skipped {skipped} elements because shape extraction or footprint generation failed.")
+        feature_anchors = list(self._feature_anchors_by_storey.get(view.storey_name, []))
 
         return GeometrySummary(
             view_id=view.view_id,
@@ -314,10 +332,12 @@ class IfcMeshPlanBackend:
             projection_candidates=dict(sorted(projection_counts.items())),
             source_elements=len(candidate_elements),
             path_count=0,
-            bounds=bounds,
+            bounds=bounds or _bounds_from_feature_anchors(feature_anchors),
             paths=[],
             polygons=polygons,
             notes=notes,
+            feature_anchors=feature_anchors,
+            feature_anchor_counts=count_feature_anchors(feature_anchors),
         )
 
     def _extract_element_footprints(self, element, plane_z, band_low, band_high, polygon_factory, unary_union):
@@ -541,6 +561,24 @@ def _merge_bounds(geometries: Iterable[object]) -> Optional[Bounds2D]:
     max_x = max(bound[2] for bound in bounds)
     max_y = max(bound[3] for bound in bounds)
     return Bounds2D(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y)
+
+
+def _bounds_from_feature_anchors(feature_anchors, padding_m: float = 2.0) -> Optional[Bounds2D]:
+    if not feature_anchors:
+        return None
+    min_x = min(anchor.anchor.x for anchor in feature_anchors)
+    min_y = min(anchor.anchor.y for anchor in feature_anchors)
+    max_x = max(anchor.anchor.x for anchor in feature_anchors)
+    max_y = max(anchor.anchor.y for anchor in feature_anchors)
+    width = max_x - min_x
+    height = max_y - min_y
+    pad = max(padding_m, width * 0.1, height * 0.1)
+    return Bounds2D(
+        min_x=min_x - pad,
+        min_y=min_y - pad,
+        max_x=max_x + pad,
+        max_y=max_y + pad,
+    )
 
 
 def _to_vector_polygons(geometry, role: str) -> List[VectorPolygon]:

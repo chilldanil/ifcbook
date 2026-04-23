@@ -15,6 +15,34 @@ class PageSpec:
 
 
 @dataclass(frozen=True)
+class FeatureOverlayRule:
+    enabled: bool = True
+    show_legend: bool = True
+    leader_enabled: bool = True
+    doors_enabled: bool = True
+    stairs_enabled: bool = True
+    rooms_enabled: bool = True
+    max_door_markers: int = 120
+    max_stair_arrows: int = 60
+    max_room_tags: int = 80
+    door_color: str = "#1d4ed8"
+    stair_color: str = "#0f766e"
+    room_fill_color: str = "#ffffff"
+    room_stroke_color: str = "#b45309"
+    room_text_color: str = "#92400e"
+    legend_color: str = "#334155"
+    leader_color: str = "#94a3b8"
+    leader_stroke_width: float = 0.16
+    leader_dasharray: str = "0.7 0.7"
+    door_label: str = "D"
+    stair_label: str = "UP"
+    room_label_mode: str = "sequential"
+    room_label_prefix: str = "R"
+    room_label_start: int = 1
+    room_fixed_label: str = "ROOM"
+
+
+@dataclass(frozen=True)
 class FloorPlanRule:
     cut_plane_m: float
     view_depth_below_m: float
@@ -25,6 +53,7 @@ class FloorPlanRule:
     occt_per_element_budget_s: float = 2.0
     cut_chord_tolerance_m: float = 5.0e-4
     highlight_fallback_lines: bool = False
+    feature_overlay: FeatureOverlayRule = field(default_factory=FeatureOverlayRule)
 
 
 @dataclass(frozen=True)
@@ -153,6 +182,16 @@ class ViewLinework:
     counts_by_kind: Dict[str, int] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class FeatureAnchor2D:
+    ifc_class: str
+    anchor: Point2D
+    dir_x: float = 1.0
+    dir_y: float = 0.0
+    source_element: Optional[str] = None
+    label: Optional[str] = None
+
+
 def typed_line_sort_key(line: TypedLine2D):
     first_x = line.points[0].x if line.points else 0.0
     first_y = line.points[0].y if line.points else 0.0
@@ -194,6 +233,8 @@ class GeometrySummary:
     notes: List[str] = field(default_factory=list)
     linework: Optional[ViewLinework] = field(default=None, metadata={"serialize": False})
     linework_counts: Dict[str, int] = field(default_factory=dict)
+    feature_anchors: List[FeatureAnchor2D] = field(default_factory=list)
+    feature_anchor_counts: Dict[str, int] = field(default_factory=dict)
     fallback_events: int = 0
     fallback_by_class: Dict[str, int] = field(default_factory=dict)
     fallback_timeout_events: int = 0

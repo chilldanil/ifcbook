@@ -35,7 +35,9 @@ Current sprint status:
 - Shared indexing helpers are wired into serializer and mesh backends.
 - OCCT fallback now returns real mesh-slice cut segments at the cut plane.
 - Fallback metadata is tracked and emitted (`fallback_events`, `fallback_by_class`, timeout/exception/empty counters).
+- Per-run aggregation is emitted in `metadata/geometry_runtime_summary.json`.
 - Regression tests added for indexing determinism and fallback reporting.
+- Local runtime note: OCCT is currently unavailable in this environment, so OCCT-active fallback-rate measurement must run on an OCCT-enabled worker.
 
 ### Phase 3B: Expand OCCT Cut Coverage
 
@@ -50,6 +52,11 @@ Acceptance criteria:
 - Deterministic output remains byte-identical across reruns.
 - `linework_counts` shows increased `CUT` coverage on professional models.
 - No reduction in total drawing completeness vs current serializer-first output.
+
+Current sprint status:
+
+- Phase 3B preview profile is added as opt-in:
+  `ifc_book_prototype/profiles/din_iso_arch_floor_plan_v2_phase3b.json`
 
 ### Phase 3C: Own Projection + Hidden Lines
 
@@ -81,6 +88,21 @@ Acceptance criteria:
 - No overlapping labels on baseline samples in default profile.
 - Output remains deterministic under reruns.
 
+Current sprint status:
+
+- First synthesis/placement slice is implemented and shipped in the renderer:
+  - deterministic door symbols (`D` + swing arc), stair arrows (`UP`), and room tags (`R-###`) are rendered from IFC-derived anchors,
+  - IFC-semantic feature anchor extraction is active in geometry backends (door/stair/space placements by storey), so symbols can render even when serializer class paths are missing,
+  - overlay behavior is now profile-driven (`floor_plan.feature_overlay`): per-feature toggles, symbol limits, colors, leader-line settings, and room label policy,
+  - deterministic collision-avoidance offset search is active for all three feature types,
+  - displaced symbols render leader lines,
+  - door symbols align to nearest wall segment when available,
+  - bundle replay injects deterministic overlay counts for doors/stairs/rooms from cached metadata using the same profile rules.
+- Remaining Phase 4 work is richer semantics and drafting control:
+  - real door swing handedness from opening semantics (not heuristic orientation),
+  - stair run direction from path/axis semantics rather than line PCA fallback,
+  - room labels from real IFC names/numbers and office profile mapping (currently sequential `R-###` IDs).
+
 ### Phase 5: SaaS Runtime Readiness
 
 Scope:
@@ -100,3 +122,4 @@ Acceptance criteria:
 1. Validate Phase 3A behavior on the large-model path and tune per-element OCCT budgets with measured fallback rates.
 2. Begin Phase 3B (`IfcColumn`, `IfcBeam`, `IfcMember`) with visual regression fixtures.
 3. Keep determinism gate (`book.pdf` + all SVG + normalized `manifest.json`) green while expanding class coverage.
+4. Move Phase 4 from profile-driven overlay controls to IFC-semantic drafting rules (door handedness, stair run direction, room label source mapping).

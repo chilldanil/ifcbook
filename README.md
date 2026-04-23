@@ -4,6 +4,7 @@ This is a runnable prototype scaffold for the MVP slice defined in the research 
 
 Current implementation snapshot and roadmap: [PROJECT_STATUS.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PROJECT_STATUS.md)
 Next implementation phases: [NEXT_FEATURE_PLAN.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/NEXT_FEATURE_PLAN.md)
+Phase 3A validation record: [PHASE3A_VALIDATION.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PHASE3A_VALIDATION.md)
 
 - IFC ingest
 - preflight and normalization
@@ -57,6 +58,18 @@ If `ifcopenshell` is available, the prototype will use it for metadata enrichmen
 
 The `samples/` directory is intended for local test IFCs and is gitignored by default.
 
+To run the opt-in Phase 3B cut-class expansion profile (adds `IfcColumn`, `IfcBeam`, `IfcMember` to `cut_classes`):
+
+```bash
+python -m ifc_book_prototype path/to/model.ifc --out out/job-001 --profile ifc_book_prototype/profiles/din_iso_arch_floor_plan_v2_phase3b.json
+```
+
+To see profile-driven annotation behavior (doors disabled, fixed room label `SPACE`):
+
+```bash
+python -m ifc_book_prototype path/to/model.ifc --out out/job-001 --profile ifc_book_prototype/profiles/din_iso_arch_floor_plan_v1_office_overlay_demo.json
+```
+
 ## Prototype Scope
 
 Current implementation:
@@ -69,6 +82,9 @@ Current implementation:
 - real per-storey linework extraction through `IfcOpenShell`'s floorplan SVG serializer when available,
 - mesh-footprint fallback when serializer extraction fails on a model,
 - capability-driven schedule planning that activates only for IFC content that is actually present,
+- deterministic feature overlays on view sheets (`D` door symbols with swing arcs, `UP` stair arrows, `R-###` room tags) when geometry anchors are available,
+- IFC-semantic feature anchor extraction (door/stair/space placements by storey) now feeds the renderer directly, so overlays are no longer dependent on serializer class-path luck,
+- feature-overlay behavior is style-profile driven (`floor_plan.feature_overlay`): per-feature enable/disable, symbol limits, colors, leader behavior, and room-label policy (`sequential` / `numeric` / `fixed` / `ifc_name`),
 - SVG-first sheet generation with PDF assembled from the generated sheet SVGs,
 - per-view geometry metadata export.
 
@@ -77,6 +93,9 @@ Bundle replay mode:
 - copies the cached sheet SVGs from a prior run,
 - writes a fresh `manifest.json` with new absolute output paths,
 - emits `metadata/bundle_summary.json` so large-model bundles can be inspected without reopening the IFC,
+- emits `metadata/geometry_runtime_summary.json` with backend usage and fallback counters,
+- injects replay feature overlays for doors/stairs/rooms on copied view sheets using cached model capability counts and profile feature toggles/colors,
+- when cached `view_geometry.json` contains serialized `feature_anchors`, replay can also place door/stair/room symbols without reopening the IFC,
 - rebuilds `book.pdf` from the cached sheet SVGs so the PDF follows the canonical sheet artifacts instead of a separate placeholder path.
 
 Not implemented yet:
@@ -108,6 +127,7 @@ out/demo/
     normalized_model.json
     view_manifest.json
     view_geometry.json
+    geometry_runtime_summary.json
   sheets/
     A-000_cover.svg
     A-001_index.svg

@@ -51,13 +51,22 @@ _RUNNER_SCRIPT = (
 def _run_pipeline_subprocess(ifc_path: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **DETERMINISTIC_ENV}
-    result = subprocess.run(
-        [sys.executable, "-c", _RUNNER_SCRIPT, str(ifc_path), "--out", str(out_dir)],
-        cwd=str(REPO_ROOT),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
+    result = None
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        result = subprocess.run(
+            [sys.executable, "-c", _RUNNER_SCRIPT, str(ifc_path), "--out", str(out_dir)],
+            cwd=str(REPO_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        # IfcOpenShell can intermittently SIGSEGV on process teardown in CI/local.
+        # Retry fresh process a small number of times before failing hard.
+        if result.returncode == -11 and attempt < max_attempts:
+            continue
+        break
+    assert result is not None
     if result.returncode != 0:
         raise RuntimeError(
             f"pipeline subprocess failed (rc={result.returncode})\n"

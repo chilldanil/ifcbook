@@ -3,6 +3,7 @@
 Snapshot date: 2026-04-23
 
 This note marks the current implementation state of the IFC-to-drawing-book prototype, what already exists in the repo, and what the next execution targets should be.
+Phase 3A measured validation details are tracked in [PHASE3A_VALIDATION.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PHASE3A_VALIDATION.md).
 
 ## Where We Are Now
 
@@ -17,6 +18,8 @@ What is real today:
 - **typed line model (`TypedLine2D` / `ViewLinework`) wired through the renderer, with explicit `LineKind` (CUT/PROJECTED/HIDDEN/OUTLINE) and `LineweightClass` (HEAVY/MEDIUM/LIGHT/FINE) classification driving stroke colors and lineweight from the style profile,**
 - **shared deterministic storey/elevation indexing helpers are now used across OCCT, serializer, and mesh geometry backends, reducing cross-backend ordering drift risk,**
 - **OCCT fallback behavior is now explicit in geometry metadata (`fallback_events`, `fallback_by_class`, timeout/exception counters) and the mesh-slice fallback produces real cut segments at the view cut plane,**
+- **`metadata/geometry_runtime_summary.json` now aggregates per-run backend usage, linework totals, and fallback rates for Phase 3A validation,**
+- **feature overlays now render deterministic door/stair/room symbols on view sheets (`D` markers with swing arcs, `UP` arrows, `R-###` room tags), with collision-avoidance offsets + leader lines and nearest-wall door alignment; IFC-semantic feature anchors (door/stair/space placement by storey) are now extracted directly and used as primary symbol anchors; overlay toggles/colors/label policy are loaded from `floor_plan.feature_overlay`; bundle replay overlays use the same profile policy and can consume serialized feature anchors,**
 - **byte-identical determinism CI gate over `book.pdf`, every sheet SVG, and `manifest.json` (modulo absolute output paths), running on all bundled samples via GitHub Actions,**
 - SVG-first sheet generation with `book.pdf` assembled from the generated sheet SVGs,
 - capability-driven schedule generation for openings, circulation, spaces, and structural element types,
@@ -27,6 +30,7 @@ What is still prototype-grade:
 - beyond-cut projection and hidden-line behavior still depend on `IfcOpenShell` serializer output instead of our own geometry kernel,
 - the OCCT cut backend ships first for `IfcWall` + `IfcSlab`; extending to columns, beams, doors, windows, and stairs is a one-line edit to `cut_classes` in the style profile but has not been visually validated yet,
 - annotations are limited to what can be inferred cheaply from IFC structure and current sheet logic,
+- semantic annotation placement is deterministic and now anchored on IFC placements, but still heuristic in parts (door handedness, stair run direction, and room label source policy still need refinement),
 - there is no exact dimension engine, room-tag engine, or office-standard drafting ruleset yet.
 
 ## What We Have Now
@@ -121,10 +125,10 @@ These are the main implementation limits right now:
 - no owned projected-line and hidden-line pipeline yet (projection still comes from serializer output),
 - OCCT timeout fallback is now functional and observable, but still needs high-volume validation on larger model corpora,
 - no hatch generation,
-- no room polygon derivation,
+- room tags currently use deterministic sequential IDs (`R-###`) instead of IFC room naming policy,
 - no automatic dimensions,
-- no collision-aware label placement system,
-- no customer office-standard profile system beyond the current lightweight sheet and lineweight profile,
+- collision-aware placement is implemented for current feature symbols, but there is no global annotation layout engine yet,
+- no full office-standard profile system yet beyond sheet/lineweight plus first overlay controls (`floor_plan.feature_overlay`),
 - no worker queue, cache service, or multi-tenant SaaS runtime yet.
 
 ## Future Goals
@@ -205,7 +209,7 @@ Recommended execution order from here:
 1. Validate the hardened OCCT cut path on larger models and profile fallback rates by class under realistic time budgets.
 2. Expand OCCT cut coverage beyond `IfcWall` / `IfcSlab` (next target: `IfcColumn`, `IfcBeam`, `IfcMember`) with visual + determinism regression checks.
 3. Start owning projected and hidden line generation in the typed line model instead of relying on serializer classification.
-4. Introduce annotation primitives and deterministic placement passes (first wave: stair direction arrows, door swings, room tags).
+4. Move current annotation primitives from heuristic defaults to IFC-semantic rules (door handedness, stair run direction, room label source) with profile-controlled toggles.
 5. Expand style profiles from page/lineweights into drafting-rule profiles, then add bundle-level cache keys and per-stage replay metadata for expensive models.
 
 ## Practical Status Summary

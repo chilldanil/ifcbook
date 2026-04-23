@@ -1,5 +1,5 @@
 {
-  "profile_id": "din_iso_arch_floor_plan_v1",
+  "profile_id": "din_iso_arch_floor_plan_v1_office_overlay_demo",
   "region": "DIN/ISO",
   "page": {
     "width_mm": 210.0,
@@ -35,7 +35,7 @@
       "enabled": true,
       "show_legend": true,
       "leader_enabled": true,
-      "doors_enabled": true,
+      "doors_enabled": false,
       "stairs_enabled": true,
       "rooms_enabled": true,
       "max_door_markers": 120,
@@ -43,19 +43,19 @@
       "max_room_tags": 80,
       "door_color": "#1d4ed8",
       "stair_color": "#0f766e",
-      "room_fill_color": "#ffffff",
-      "room_stroke_color": "#b45309",
-      "room_text_color": "#92400e",
+      "room_fill_color": "#fff7ed",
+      "room_stroke_color": "#c2410c",
+      "room_text_color": "#9a3412",
       "legend_color": "#334155",
       "leader_color": "#94a3b8",
       "leader_stroke_width": 0.16,
       "leader_dasharray": "0.7 0.7",
       "door_label": "D",
       "stair_label": "UP",
-      "room_label_mode": "sequential",
+      "room_label_mode": "fixed",
       "room_label_prefix": "R",
       "room_label_start": 1,
-      "room_fixed_label": "ROOM"
+      "room_fixed_label": "SPACE"
     }
   },
   "sheet_prefix": "A",

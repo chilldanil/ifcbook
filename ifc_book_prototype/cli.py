@@ -22,20 +22,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     output_dir = Path(args.out)
+    profile = load_style_profile(args.profile)
     if args.bundle:
         if args.ifc_path:
             parser.error("Specify either an IFC path or --bundle, not both.")
         bundle_dir = Path(args.bundle)
         if not bundle_dir.exists():
             parser.error(f"Bundle directory does not exist: {bundle_dir}")
-        manifest = replay_bundle(bundle_dir=bundle_dir, output_dir=output_dir)
+        manifest = replay_bundle(bundle_dir=bundle_dir, output_dir=output_dir, profile=profile)
     else:
         if not args.ifc_path:
             parser.error("Either an IFC path or --bundle is required.")
         ifc_path = Path(args.ifc_path)
         if not ifc_path.exists():
             parser.error(f"Input IFC does not exist: {ifc_path}")
-        profile = load_style_profile(args.profile)
         manifest = PrototypePipeline(profile).run(ifc_path=ifc_path, output_dir=output_dir)
 
     print(f"job_id={manifest.job_id}")

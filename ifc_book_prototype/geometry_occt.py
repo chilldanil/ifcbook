@@ -20,6 +20,7 @@ from . import occt_section
 from ._ifc_index import build_storey_elevations, index_elements_by_storey
 from .domain import (
     Bounds2D,
+    FeatureAnchor2D,
     GeometrySummary,
     LineKind,
     LineweightClass,
@@ -30,6 +31,7 @@ from .domain import (
     ViewLinework,
     typed_line_sort_key,
 )
+from .feature_anchors import build_feature_anchors_by_storey, count_feature_anchors
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +51,7 @@ class OCCTSectionBackend:
     _unit_scale: float = field(init=False, default=1.0)
     _storey_elevations: Dict[str, float] = field(init=False, default_factory=dict)
     _elements_by_storey: Dict[str, List[object]] = field(init=False, default_factory=dict)
+    _feature_anchors_by_storey: Dict[str, List[FeatureAnchor2D]] = field(init=False, default_factory=dict)
     _mesh_settings: object = field(init=False, default=None)
 
     def __post_init__(self) -> None:
@@ -66,6 +69,11 @@ class OCCTSectionBackend:
         self._elements_by_storey = index_elements_by_storey(
             self._model,
             self.profile.floor_plan.include_classes,
+            get_container,
+        )
+        self._feature_anchors_by_storey = build_feature_anchors_by_storey(
+            self._model,
+            self._unit_scale,
             get_container,
         )
         self._mesh_settings = ifcopenshell.geom.settings()
@@ -117,6 +125,8 @@ class OCCTSectionBackend:
             if report.fallback_by_class:
                 pairs = [f"{class_name}:{count}" for class_name, count in sorted(report.fallback_by_class.items())]
                 notes.append("OCCT fallback by class: " + ", ".join(pairs) + ".")
+        feature_anchors = list(self._feature_anchors_by_storey.get(view.storey_name, []))
+        bounds = bounds or _bounds_from_feature_anchors(feature_anchors)
         return GeometrySummary(
             view_id=view.view_id,
             backend=self.name,
@@ -135,6 +145,8 @@ class OCCTSectionBackend:
             fallback_timeout_events=report.fallback_timeout_events,
             fallback_exception_events=report.fallback_exception_events,
             fallback_empty_events=report.fallback_empty_events,
+            feature_anchors=feature_anchors,
+            feature_anchor_counts=count_feature_anchors(feature_anchors),
         )
 
     # ------------------------------------------------------------------
@@ -226,6 +238,11 @@ class CompositeGeometryBackend:
 
         bounds = _union_bounds(occt_summary.bounds, serializer_summary.bounds)
         merged_notes = sorted({*(occt_summary.notes or []), *(serializer_summary.notes or [])})
+        feature_anchors = _merge_feature_anchors(
+            serializer_summary.feature_anchors,
+            occt_summary.feature_anchors,
+        )
+        bounds = bounds or _bounds_from_feature_anchors(feature_anchors)
 
         return GeometrySummary(
             view_id=view.view_id,
@@ -245,6 +262,8 @@ class CompositeGeometryBackend:
             fallback_timeout_events=occt_summary.fallback_timeout_events,
             fallback_exception_events=occt_summary.fallback_exception_events,
             fallback_empty_events=occt_summary.fallback_empty_events,
+            feature_anchors=feature_anchors,
+            feature_anchor_counts=count_feature_anchors(feature_anchors),
         )
 
 
@@ -273,6 +292,51 @@ def _union_bounds(a: Optional[Bounds2D], b: Optional[Bounds2D]) -> Optional[Boun
         min_y=min(a.min_y, b.min_y),
         max_x=max(a.max_x, b.max_x),
         max_y=max(a.max_y, b.max_y),
+    )
+
+
+def _merge_feature_anchors(
+    primary: Sequence[FeatureAnchor2D],
+    secondary: Sequence[FeatureAnchor2D],
+) -> List[FeatureAnchor2D]:
+    merged: Dict[Tuple[str, str, float, float], FeatureAnchor2D] = {}
+    for anchor in list(primary) + list(secondary):
+        key = (
+            anchor.ifc_class,
+            anchor.source_element or "",
+            round(anchor.anchor.x, 4),
+            round(anchor.anchor.y, 4),
+        )
+        # Keep first item (primary wins).
+        if key not in merged:
+            merged[key] = anchor
+    values = list(merged.values())
+    values.sort(
+        key=lambda item: (
+            item.ifc_class,
+            item.source_element or "",
+            item.anchor.y,
+            item.anchor.x,
+        )
+    )
+    return values
+
+
+def _bounds_from_feature_anchors(feature_anchors: Sequence[FeatureAnchor2D], padding_m: float = 2.0) -> Optional[Bounds2D]:
+    if not feature_anchors:
+        return None
+    min_x = min(anchor.anchor.x for anchor in feature_anchors)
+    min_y = min(anchor.anchor.y for anchor in feature_anchors)
+    max_x = max(anchor.anchor.x for anchor in feature_anchors)
+    max_y = max(anchor.anchor.y for anchor in feature_anchors)
+    width = max_x - min_x
+    height = max_y - min_y
+    pad = max(padding_m, width * 0.1, height * 0.1)
+    return Bounds2D(
+        min_x=min_x - pad,
+        min_y=min_y - pad,
+        max_x=max_x + pad,
+        max_y=max_y + pad,
     )
 
 

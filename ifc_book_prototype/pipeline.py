@@ -18,6 +18,7 @@ from .domain import (
     to_primitive,
 )
 from .geometry_backend import create_geometry_backend
+from .geometry_metrics import summarize_geometry_runtime
 from .ifc_loader import IfcScan, scan_ifc
 from .render_pdf import write_pdf_from_svg_sheets
 from .render_svg import render_cover_svg, render_index_svg, render_schedule_svg, render_view_svg
@@ -78,6 +79,7 @@ class PrototypePipeline:
         self._write_json(metadata_dir / "normalized_model.json", normalized)
         self._write_json(metadata_dir / "view_manifest.json", views)
         self._write_json(metadata_dir / "view_geometry.json", geometry)
+        self._write_json(metadata_dir / "geometry_runtime_summary.json", summarize_geometry_runtime(geometry))
         self._write_json(metadata_dir / "schedule_manifest.json", schedules)
         self._write_json(output_dir / "manifest.json", manifest)
         return manifest
