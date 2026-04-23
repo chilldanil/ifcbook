@@ -109,11 +109,6 @@ class IfcSerializerPlanBackend:
             self._unit_scale,
             self._get_container,
         )
-        self._feature_anchors_by_storey = build_feature_anchors_by_storey(
-            self._model,
-            self._unit_scale,
-            self._get_container,
-        )
         self._storey_linework = self._build_storey_linework()
 
     def build_view(self, view: PlannedView) -> GeometrySummary:
@@ -270,6 +265,11 @@ class IfcMeshPlanBackend:
         self._elements_by_storey = index_elements_by_storey(
             self._model,
             self.included_classes,
+            self._get_container,
+        )
+        self._feature_anchors_by_storey = build_feature_anchors_by_storey(
+            self._model,
+            self._unit_scale,
             self._get_container,
         )
 

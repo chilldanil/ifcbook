@@ -71,3 +71,31 @@ Interpretation:
 
 - Phase 3A instrumentation is active and producing deterministic runtime summaries.
 - OCCT fallback metrics are wired, but currently zero in this environment because OCCT backend is not active locally.
+
+## 4) OCCT-enabled worker procedure
+
+When running on a worker with `pythonocc-core==7.8.1.1` installed, use the following
+steps to capture real fallback rates under the configured 2.0 s per-element budget:
+
+```bash
+pip install -e '.[ifc,dev,occt]'
+LC_ALL=C.UTF-8 TZ=UTC PYTHONHASHSEED=0 \
+  python -m ifc_book_prototype.cli samples/Building-Architecture.ifc --out out/occt_small
+LC_ALL=C.UTF-8 TZ=UTC PYTHONHASHSEED=0 \
+  python -m ifc_book_prototype.cli samples/Hochvolthaus.ifc --out out/occt_large
+
+python -m ifc_book_prototype.cli --summarize-runtime out/occt_small
+python -m ifc_book_prototype.cli --summarize-runtime out/occt_large
+```
+
+The `--summarize-runtime` subcommand extracts per-run counters from
+`metadata/geometry_runtime_summary.json` without re-executing the pipeline.
+
+Acceptance checks to capture per sample in follow-up commits:
+
+- `occt_view_count` is greater than zero on the composite backend.
+- `fallback.timeout_events` should be a small fraction of `CUT` linework count on
+  small samples; on large samples it is expected to be nonzero — the metric we
+  want to tune `occt_per_element_budget_s` against.
+- Two back-to-back runs produce byte-identical `book.pdf` and sheet SVGs
+  (re-run the determinism gate to confirm).

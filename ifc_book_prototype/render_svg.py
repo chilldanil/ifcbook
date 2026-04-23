@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Tuple
 
 from .domain import (
     Bounds2D,
+    ELEVATION_VIEW_KINDS,
     FeatureOverlayRule,
     GeometrySummary,
     LineKind,
@@ -130,6 +131,10 @@ def render_view_svg(
     geometry: GeometrySummary,
     profile: StyleProfile,
 ) -> str:
+    is_elevation = view.view_kind in ELEVATION_VIEW_KINDS
+    if is_elevation:
+        return _render_elevation_svg(view, geometry, profile)
+
     drawing = _plan_drawing(geometry, profile, x=20.0, y=38.0, width=170.0, height=150.0)
     feature_counts = _feature_annotation_counts(geometry)
     info_lines = [
@@ -154,6 +159,51 @@ def render_view_svg(
         title=view.title,
         sheet_id=view.sheet_id,
         subtitle="Real IFC-driven floor-plan linework prototype",
+        body="\n".join([drawing, detail, "\n".join(notes)]),
+        profile=profile,
+    )
+
+
+def _render_elevation_svg(
+    view: PlannedView,
+    geometry: GeometrySummary,
+    profile: StyleProfile,
+) -> str:
+    """Elevation sheet: projected linework only, no feature overlay.
+
+    Uses the same typed-linework renderer as plans when a ``ViewLinework`` is
+    present. When geometry is empty (e.g. OCCT unavailable), renders an
+    explanatory panel so the sheet stays deterministic.
+    """
+    x, y, width, height = 20.0, 38.0, 170.0, 150.0
+    if geometry.bounds is not None and geometry.linework is not None and geometry.linework.lines:
+        drawing = _plan_linework_typed(geometry, profile, x, y, width, height)
+    elif geometry.bounds is not None and geometry.paths:
+        drawing = _plan_linework(geometry, profile, x, y, width, height)
+    else:
+        drawing = "\n".join([
+            f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
+            _text(x + 4.0, y + 10.0, "No elevation geometry available for this view.", 4.0),
+            _text(x + 4.0, y + 17.0, "Install the [occt] extra to populate elevations.", 3.5, fill="#475569"),
+        ])
+
+    info_lines = [
+        ("View", view.title),
+        ("View kind", view.view_kind),
+        ("Geometry backend", geometry.backend),
+        ("Source elements", str(geometry.source_elements)),
+        ("Projected lines", str((geometry.linework_counts or {}).get("PROJECTED", 0))),
+        ("Proj. classes", _format_class_counts(geometry.projection_candidates)),
+    ]
+    detail = _info_lines(info_lines, start_y=205.0)
+    note_y = 257.0
+    notes = [_text(20.0, note_y, "Notes", 4.4, weight="700")]
+    for index, note in enumerate(geometry.notes, start=1):
+        notes.append(_text(20.0, note_y + index * 6.0, f"- {note}", 3.5))
+    return _wrap_sheet(
+        title=view.title,
+        sheet_id=view.sheet_id,
+        subtitle="Projected elevation linework (owned OCCT path)",
         body="\n".join([drawing, detail, "\n".join(notes)]),
         profile=profile,
     )

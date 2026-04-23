@@ -49,10 +49,13 @@ class FloorPlanRule:
     overhead_depth_above_m: float
     include_classes: List[str]
     # --- Phase 2 OCCT cut-extractor knobs (defaults are backwards compatible) ---
-    cut_classes: List[str] = field(default_factory=lambda: ["IfcWall", "IfcSlab"])
+    cut_classes: List[str] = field(default_factory=lambda: ["IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", "IfcMember"])
     occt_per_element_budget_s: float = 2.0
     cut_chord_tolerance_m: float = 5.0e-4
     highlight_fallback_lines: bool = False
+    # --- Phase 3C owned projection/hidden toggles (default off = back-compat) ---
+    own_projection: bool = False
+    own_hidden: bool = False
     feature_overlay: FeatureOverlayRule = field(default_factory=FeatureOverlayRule)
 
 
@@ -127,6 +130,20 @@ class NormalizedModel:
     warnings: List[str] = field(default_factory=list)
 
 
+VIEW_KIND_PLAN = "plan"
+VIEW_KIND_ELEVATION_NORTH = "elevation_north"
+VIEW_KIND_ELEVATION_SOUTH = "elevation_south"
+VIEW_KIND_ELEVATION_EAST = "elevation_east"
+VIEW_KIND_ELEVATION_WEST = "elevation_west"
+
+ELEVATION_VIEW_KINDS = (
+    VIEW_KIND_ELEVATION_NORTH,
+    VIEW_KIND_ELEVATION_SOUTH,
+    VIEW_KIND_ELEVATION_EAST,
+    VIEW_KIND_ELEVATION_WEST,
+)
+
+
 @dataclass(frozen=True)
 class PlannedView:
     view_id: str
@@ -138,6 +155,8 @@ class PlannedView:
     view_depth_below_m: float
     overhead_depth_above_m: float
     included_classes: List[str]
+    # Back-compat default: existing serialized view manifests load as plans.
+    view_kind: str = VIEW_KIND_PLAN
 
 
 class LineKind(Enum):

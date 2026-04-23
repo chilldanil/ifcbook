@@ -319,6 +319,28 @@ def edge_to_polyline(edge, chord_tol_m: float) -> List[Tuple[float, float]]:
     return points
 
 
+def edge_to_polyline_3d(edge, chord_tol_m: float) -> List[Tuple[float, float, float]]:
+    """Sample a TopoDS_Edge to a quantized 3D polyline.
+
+    Unlike ``edge_to_polyline`` this returns ``(x, y, z)`` samples so callers
+    can apply arbitrary planar projections (used by elevation views).
+    """
+    _require_occt()
+    curve = BRepAdaptor_Curve(edge)
+    sampler = GCPnts_QuasiUniformDeflection(curve, chord_tol_m)
+    if not sampler.IsDone() or sampler.NbPoints() < 2:
+        return []
+    points: List[Tuple[float, float, float]] = []
+    last: Optional[Tuple[float, float, float]] = None
+    for i in range(1, sampler.NbPoints() + 1):
+        pnt = sampler.Value(i)
+        qp = (quantize(pnt.X()), quantize(pnt.Y()), quantize(pnt.Z()))
+        if qp != last:
+            points.append(qp)
+            last = qp
+    return points
+
+
 def chain_polylines(segments: Sequence[Sequence[Tuple[float, float]]]) -> List[List[Tuple[float, float]]]:
     """Greedy endpoint chaining; deterministic on quantized + pre-sorted input."""
     remaining = [list(s) for s in segments if len(s) >= 2]

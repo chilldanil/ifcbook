@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from . import occt_section
+from . import geometry_projection, occt_section
 from ._ifc_index import build_storey_elevations, index_elements_by_storey
 from .domain import (
     Bounds2D,
@@ -210,20 +210,57 @@ class CompositeGeometryBackend:
         merged_lines: List[TypedLine2D] = []
         if occt_summary.linework is not None:
             merged_lines.extend(occt_summary.linework.lines)
-        for path in serializer_summary.paths:
-            if path.role != "projection":
-                continue
-            if not path.points:
-                continue
-            merged_lines.append(
-                TypedLine2D(
-                    kind=LineKind.PROJECTED,
-                    lineweight_class=LineweightClass.LIGHT,
-                    points=list(path.points),
-                    closed=path.closed,
-                    source_ifc_class=path.ifc_class,
-                )
+
+        # Phase 3C: owned projection/hidden lines (scaffold — empty until real
+        # implementation lands). When ``own_projection`` is on, serializer
+        # projection is suppressed even if owned output is empty; this is the
+        # "own it or bust" contract documented in ``geometry_projection``.
+        profile = getattr(self.occt, "profile", None)
+        ifc_geom = getattr(self.occt, "_ifc_geom", None)
+        storey_elevations = getattr(self.occt, "_storey_elevations", {}) or {}
+        elements_by_storey = getattr(self.occt, "_elements_by_storey", {}) or {}
+        own_projection_on = profile is not None and geometry_projection.owned_projection_enabled(profile)
+        owned_projection: List[TypedLine2D] = []
+        owned_hidden: List[TypedLine2D] = []
+        if profile is not None:
+            storey_z = storey_elevations.get(view.storey_name, 0.0)
+            # Owned projection walks the same element set the cut extractor
+            # considers — the same cut_classes filter would make sense here,
+            # but step 1 deliberately walks ALL included_classes since the
+            # projection target is beyond-cut geometry, not just cut elements.
+            storey_elements = list(elements_by_storey.get(view.storey_name, []))
+            owned_projection = geometry_projection.extract_owned_projection_lines(
+                view=view,
+                profile=profile,
+                elements=storey_elements,
+                ifc_geom_module=ifc_geom,
+                storey_elevation_m=storey_z,
             )
+            owned_hidden = geometry_projection.extract_owned_hidden_lines(
+                view=view,
+                profile=profile,
+                elements=storey_elements,
+                ifc_geom_module=ifc_geom,
+                storey_elevation_m=storey_z,
+            )
+
+        if not own_projection_on:
+            for path in serializer_summary.paths:
+                if path.role != "projection":
+                    continue
+                if not path.points:
+                    continue
+                merged_lines.append(
+                    TypedLine2D(
+                        kind=LineKind.PROJECTED,
+                        lineweight_class=LineweightClass.LIGHT,
+                        points=list(path.points),
+                        closed=path.closed,
+                        source_ifc_class=path.ifc_class,
+                    )
+                )
+        merged_lines.extend(owned_projection)
+        merged_lines.extend(owned_hidden)
         merged_lines.sort(key=typed_line_sort_key)
 
         counts_by_kind: Dict[str, int] = {}

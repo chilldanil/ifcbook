@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 from .domain import (
+    ELEVATION_VIEW_KINDS,
     GeometrySummary,
     NormalizedModel,
     PipelineManifest,
@@ -15,8 +16,14 @@ from .domain import (
     SheetArtifact,
     StoreySummary,
     StyleProfile,
+    VIEW_KIND_ELEVATION_EAST,
+    VIEW_KIND_ELEVATION_NORTH,
+    VIEW_KIND_ELEVATION_SOUTH,
+    VIEW_KIND_ELEVATION_WEST,
+    VIEW_KIND_PLAN,
     to_primitive,
 )
+from .elevation_backend import ElevationBackend, is_elevation_view
 from .geometry_backend import create_geometry_backend
 from .geometry_metrics import summarize_geometry_runtime
 from .ifc_loader import IfcScan, scan_ifc
@@ -71,7 +78,17 @@ class PrototypePipeline:
             self.profile.floor_plan.include_classes,
             profile=self.profile,
         )
-        geometry = [geometry_backend.build_view(view) for view in views]
+        # Elevation backend is stateful (opens the IFC once) and lazy — only
+        # instantiated if at least one elevation view is planned.
+        elevation_backend: ElevationBackend | None = None
+        if any(is_elevation_view(view) for view in views):
+            elevation_backend = ElevationBackend(ifc_path=ifc_path, profile=self.profile)
+        geometry: List[GeometrySummary] = []
+        for view in views:
+            if is_elevation_view(view) and elevation_backend is not None:
+                geometry.append(elevation_backend.build_view(view))
+            else:
+                geometry.append(geometry_backend.build_view(view))
         schedules = extract_schedule_sheets(ifc_path, self.profile.sheet_prefix)
         manifest = self._render(output_dir, metadata_dir, sheets_dir, preflight, normalized, views, geometry, schedules)
 
@@ -153,6 +170,34 @@ class PrototypePipeline:
                     view_depth_below_m=self.profile.floor_plan.view_depth_below_m,
                     overhead_depth_above_m=self.profile.floor_plan.overhead_depth_above_m,
                     included_classes=list(self.profile.floor_plan.include_classes),
+                    view_kind=VIEW_KIND_PLAN,
+                )
+            )
+
+        # Elevation views: N/S/E/W. One sheet each, at A-201..A-204.
+        # Storey name is left empty because elevations span the whole building;
+        # storey_elevation_m is None for the same reason.
+        elevation_specs = (
+            (VIEW_KIND_ELEVATION_NORTH, "North Elevation", 201),
+            (VIEW_KIND_ELEVATION_EAST, "East Elevation", 202),
+            (VIEW_KIND_ELEVATION_SOUTH, "South Elevation", 203),
+            (VIEW_KIND_ELEVATION_WEST, "West Elevation", 204),
+        )
+        for view_kind, title, sheet_number in elevation_specs:
+            sheet_id = f"{self.profile.sheet_prefix}-{sheet_number:03d}"
+            view_id = view_kind
+            views.append(
+                PlannedView(
+                    view_id=view_id,
+                    sheet_id=sheet_id,
+                    title=title,
+                    storey_name="",
+                    storey_elevation_m=None,
+                    cut_plane_m=0.0,
+                    view_depth_below_m=0.0,
+                    overhead_depth_above_m=0.0,
+                    included_classes=list(self.profile.floor_plan.include_classes),
+                    view_kind=view_kind,
                 )
             )
         return views
@@ -211,7 +256,11 @@ class PrototypePipeline:
 
         for view, view_geometry in zip(views, geometry):
             svg = render_view_svg(model, view, view_geometry, self.profile)
-            svg_path = sheets_dir / f"{view.sheet_id.lower()}_{_slugify(view.storey_name)}.svg"
+            # For plans, slug on storey_name; for elevations, storey_name is
+            # empty and the view_id (e.g. ``elevation_north``) is the natural
+            # identifier. Keep filenames stable and view-specific.
+            slug_source = view.storey_name if view.storey_name else view.view_id
+            svg_path = sheets_dir / f"{view.sheet_id.lower()}_{_slugify(slug_source)}.svg"
             svg_path.write_text(svg, encoding="utf-8")
             sheet_artifacts.append(
                 SheetArtifact(

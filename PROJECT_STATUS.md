@@ -14,7 +14,7 @@ What is real today:
 - a runnable CLI pipeline that accepts an IFC or replays an existing generated bundle,
 - deterministic preflight, normalization, view planning, schedule planning, sheet generation, and manifest emission,
 - real floor-plan linework extraction through `IfcOpenShell`'s floorplan SVG serializer,
-- **cut geometry for the configured `cut_classes` (default `IfcWall`, `IfcSlab`) derived from exact OCCT BRep sectioning, with per-element mesh-slice fallback under a configurable wall-clock budget — activated automatically when the `[occt]` extra is installed,**
+- **cut geometry for the configured `cut_classes` (default `IfcWall`, `IfcSlab`, `IfcColumn`, `IfcBeam`, `IfcMember`) derived from exact OCCT BRep sectioning, with per-element mesh-slice fallback under a configurable wall-clock budget — activated automatically when the `[occt]` extra is installed,**
 - **typed line model (`TypedLine2D` / `ViewLinework`) wired through the renderer, with explicit `LineKind` (CUT/PROJECTED/HIDDEN/OUTLINE) and `LineweightClass` (HEAVY/MEDIUM/LIGHT/FINE) classification driving stroke colors and lineweight from the style profile,**
 - **shared deterministic storey/elevation indexing helpers are now used across OCCT, serializer, and mesh geometry backends, reducing cross-backend ordering drift risk,**
 - **OCCT fallback behavior is now explicit in geometry metadata (`fallback_events`, `fallback_by_class`, timeout/exception counters) and the mesh-slice fallback produces real cut segments at the view cut plane,**
@@ -28,7 +28,8 @@ What is real today:
 What is still prototype-grade:
 
 - beyond-cut projection and hidden-line behavior still depend on `IfcOpenShell` serializer output instead of our own geometry kernel,
-- the OCCT cut backend ships first for `IfcWall` + `IfcSlab`; extending to columns, beams, doors, windows, and stairs is a one-line edit to `cut_classes` in the style profile but has not been visually validated yet,
+- the OCCT cut backend now defaults to `IfcWall`, `IfcSlab`, `IfcColumn`, `IfcBeam`, `IfcMember`; extending to doors, windows, and stairs is a one-line edit to `cut_classes` in the style profile but has not been visually validated yet,
+- owned projection and hidden line generation is scaffolded behind the `floor_plan.own_projection` / `floor_plan.own_hidden` profile toggles (default off) — the real implementation is Phase 3C work,
 - annotations are limited to what can be inferred cheaply from IFC structure and current sheet logic,
 - semantic annotation placement is deterministic and now anchored on IFC placements, but still heuristic in parts (door handedness, stair run direction, and room label source policy still need refinement),
 - there is no exact dimension engine, room-tag engine, or office-standard drafting ruleset yet.
