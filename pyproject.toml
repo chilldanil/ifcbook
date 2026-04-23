@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ifc-book-prototype"
+version = "0.1.0"
+description = "Prototype pipeline for IFC to architectural drawing book generation."
+requires-python = ">=3.9"
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+ifc = ["ifcopenshell>=0.8.0"]
+
+[project.scripts]
+ifc-book-prototype = "ifc_book_prototype.cli:main"
+
+[tool.setuptools]
+include-package-data = true
