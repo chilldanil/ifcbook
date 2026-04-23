@@ -65,7 +65,11 @@ class PrototypePipeline:
         preflight, scan = self._preflight(ifc_path)
         normalized = self._normalize(scan, preflight)
         views = self._plan_views(normalized)
-        geometry_backend = create_geometry_backend(ifc_path, self.profile.floor_plan.include_classes)
+        geometry_backend = create_geometry_backend(
+            ifc_path,
+            self.profile.floor_plan.include_classes,
+            profile=self.profile,
+        )
         geometry = [geometry_backend.build_view(view) for view in views]
         schedules = extract_schedule_sheets(ifc_path, self.profile.sheet_prefix)
         manifest = self._render(output_dir, metadata_dir, sheets_dir, preflight, normalized, views, geometry, schedules)

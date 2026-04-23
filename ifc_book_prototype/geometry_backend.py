@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 from xml.etree import ElementTree
 
+from ._ifc_index import build_storey_elevations, index_elements_by_storey
 from .domain import Bounds2D, GeometrySummary, Point2D, PlannedView, VectorPath, VectorPolygon
 
 
@@ -37,8 +38,29 @@ class NullGeometryBackend:
         )
 
 
-def create_geometry_backend(ifc_path: Path, included_classes: Iterable[str]):
+def create_geometry_backend(ifc_path: Path, included_classes: Iterable[str], profile=None):
+    """Pick the best available geometry backend.
+
+    Precedence:
+      1. CompositeGeometryBackend (OCCT cut + serializer projection) — only when
+         the [occt] extra is installed AND a StyleProfile is supplied so the
+         OCCT layer can read its budget and chord tolerance.
+      2. IfcSerializerPlanBackend (legacy primary).
+      3. IfcMeshPlanBackend (mesh-footprint fallback).
+      4. NullGeometryBackend.
+    """
     included = list(included_classes)
+    if profile is not None:
+        try:
+            from . import occt_section  # local import; safe even without OCCT
+            if occt_section.OCCT_AVAILABLE:
+                from .geometry_occt import CompositeGeometryBackend, OCCTSectionBackend
+                serializer = IfcSerializerPlanBackend(ifc_path=ifc_path, included_classes=included)
+                occt = OCCTSectionBackend(ifc_path=ifc_path, profile=profile)
+                return CompositeGeometryBackend(occt=occt, serializer=serializer)
+        except Exception:
+            # Any failure in the OCCT path falls through to the serializer path.
+            pass
     try:
         return IfcSerializerPlanBackend(ifc_path=ifc_path, included_classes=included)
     except Exception:
@@ -75,8 +97,12 @@ class IfcSerializerPlanBackend:
         self._get_container = get_container
         self._model = ifcopenshell.open(str(self.ifc_path))
         self._unit_scale = float(calculate_unit_scale(self._model))
-        self._storey_elevations = self._build_storey_elevations()
-        self._elements_by_storey = self._index_elements_by_storey()
+        self._storey_elevations = build_storey_elevations(self._model, self._unit_scale)
+        self._elements_by_storey = index_elements_by_storey(
+            self._model,
+            self.included_classes,
+            self._get_container,
+        )
         self._storey_linework = self._build_storey_linework()
 
     def build_view(self, view: PlannedView) -> GeometrySummary:
@@ -112,30 +138,6 @@ class IfcSerializerPlanBackend:
             polygons=[],
             notes=list(storey_linework.notes),
         )
-
-    def _build_storey_elevations(self) -> Dict[str, float]:
-        elevations: Dict[str, float] = {}
-        for storey in self._model.by_type("IfcBuildingStorey"):
-            name = (getattr(storey, "Name", None) or "").strip()
-            if not name:
-                continue
-            elevation = getattr(storey, "Elevation", None)
-            if elevation is not None:
-                elevations[name] = float(elevation) * self._unit_scale
-        return elevations
-
-    def _index_elements_by_storey(self) -> Dict[str, List[object]]:
-        by_storey: Dict[str, List[object]] = {}
-        for class_name in self.included_classes:
-            for element in self._model.by_type(class_name):
-                container = self._get_container(element)
-                storey_name = (getattr(container, "Name", None) or "").strip() if container else ""
-                if not storey_name:
-                    continue
-                by_storey.setdefault(storey_name, []).append(element)
-        for storey_name, elements in by_storey.items():
-            elements.sort(key=lambda element: (element.is_a(), getattr(element, "GlobalId", ""), element.id()))
-        return by_storey
 
     def _build_storey_linework(self) -> Dict[str, _PreparedStoreyLinework]:
         settings = self._draw.draw_settings()
@@ -247,8 +249,12 @@ class IfcMeshPlanBackend:
         self._unit_scale = float(calculate_unit_scale(self._model))
         self._settings = ifcopenshell.geom.settings()
         self._settings.set(self._settings.USE_WORLD_COORDS, True)
-        self._storey_elevations = self._build_storey_elevations()
-        self._elements_by_storey = self._index_elements_by_storey()
+        self._storey_elevations = build_storey_elevations(self._model, self._unit_scale)
+        self._elements_by_storey = index_elements_by_storey(
+            self._model,
+            self.included_classes,
+            self._get_container,
+        )
 
     def build_view(self, view: PlannedView) -> GeometrySummary:
         from shapely.geometry import Polygon  # type: ignore
@@ -313,30 +319,6 @@ class IfcMeshPlanBackend:
             polygons=polygons,
             notes=notes,
         )
-
-    def _build_storey_elevations(self) -> Dict[str, float]:
-        elevations: Dict[str, float] = {}
-        for storey in self._model.by_type("IfcBuildingStorey"):
-            name = (getattr(storey, "Name", None) or "").strip()
-            if not name:
-                continue
-            elevation = getattr(storey, "Elevation", None)
-            if elevation is not None:
-                elevations[name] = float(elevation) * self._unit_scale
-        return elevations
-
-    def _index_elements_by_storey(self) -> Dict[str, List[object]]:
-        by_storey: Dict[str, List[object]] = {}
-        for class_name in self.included_classes:
-            for element in self._model.by_type(class_name):
-                container = self._get_container(element)
-                storey_name = (getattr(container, "Name", None) or "").strip() if container else ""
-                if not storey_name:
-                    continue
-                by_storey.setdefault(storey_name, []).append(element)
-        for storey_name, elements in by_storey.items():
-            elements.sort(key=lambda element: (element.is_a(), getattr(element, "GlobalId", ""), element.id()))
-        return by_storey
 
     def _extract_element_footprints(self, element, plane_z, band_low, band_high, polygon_factory, unary_union):
         try:

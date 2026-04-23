@@ -26,7 +26,11 @@
       "IfcDoor",
       "IfcWindow",
       "IfcStair"
-    ]
+    ],
+    "cut_classes": ["IfcWall", "IfcSlab"],
+    "occt_per_element_budget_s": 2.0,
+    "cut_chord_tolerance_m": 0.0005,
+    "highlight_fallback_lines": false
   },
   "sheet_prefix": "A",
   "cover_sheet_id": "A-000",

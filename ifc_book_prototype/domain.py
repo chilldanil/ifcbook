@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields, is_dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,11 @@ class FloorPlanRule:
     view_depth_below_m: float
     overhead_depth_above_m: float
     include_classes: List[str]
+    # --- Phase 2 OCCT cut-extractor knobs (defaults are backwards compatible) ---
+    cut_classes: List[str] = field(default_factory=lambda: ["IfcWall", "IfcSlab"])
+    occt_per_element_budget_s: float = 2.0
+    cut_chord_tolerance_m: float = 5.0e-4
+    highlight_fallback_lines: bool = False
 
 
 @dataclass(frozen=True)
@@ -105,6 +111,75 @@ class PlannedView:
     included_classes: List[str]
 
 
+class LineKind(Enum):
+    CUT = "CUT"
+    PROJECTED = "PROJECTED"
+    HIDDEN = "HIDDEN"
+    OUTLINE = "OUTLINE"
+
+
+class LineweightClass(Enum):
+    HEAVY = "HEAVY"
+    MEDIUM = "MEDIUM"
+    LIGHT = "LIGHT"
+    FINE = "FINE"
+
+
+@dataclass(frozen=True)
+class TypedLine2D:
+    kind: LineKind
+    lineweight_class: LineweightClass
+    points: List[Point2D]
+    closed: bool = False
+    source_element: Optional[str] = None
+    source_ifc_class: Optional[str] = None
+    z_order_hint: int = 0
+    notes: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TypedRegion2D:
+    kind: LineKind
+    rings: List[List[Point2D]]
+    source_element: Optional[str] = None
+    source_ifc_class: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ViewLinework:
+    lines: List[TypedLine2D] = field(default_factory=list, metadata={"serialize": False})
+    regions: List[TypedRegion2D] = field(default_factory=list, metadata={"serialize": False})
+    quantization_m: float = 1.0e-5
+    counts_by_kind: Dict[str, int] = field(default_factory=dict)
+
+
+def typed_line_sort_key(line: TypedLine2D):
+    first_x = line.points[0].x if line.points else 0.0
+    first_y = line.points[0].y if line.points else 0.0
+    return (
+        line.kind.name,
+        line.source_ifc_class or "",
+        line.source_element or "",
+        first_x,
+        first_y,
+        len(line.points),
+    )
+
+
+def typed_region_sort_key(region: TypedRegion2D):
+    first_ring = region.rings[0] if region.rings else []
+    first_x = first_ring[0].x if first_ring else 0.0
+    first_y = first_ring[0].y if first_ring else 0.0
+    return (
+        region.kind.name,
+        region.source_ifc_class or "",
+        region.source_element or "",
+        first_x,
+        first_y,
+        len(region.rings),
+    )
+
+
 @dataclass(frozen=True)
 class GeometrySummary:
     view_id: str
@@ -117,6 +192,13 @@ class GeometrySummary:
     paths: List[VectorPath] = field(default_factory=list, metadata={"serialize": False})
     polygons: List[VectorPolygon] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+    linework: Optional[ViewLinework] = field(default=None, metadata={"serialize": False})
+    linework_counts: Dict[str, int] = field(default_factory=dict)
+    fallback_events: int = 0
+    fallback_by_class: Dict[str, int] = field(default_factory=dict)
+    fallback_timeout_events: int = 0
+    fallback_exception_events: int = 0
+    fallback_empty_events: int = 0
 
 
 @dataclass(frozen=True)
@@ -162,6 +244,8 @@ class PipelineManifest:
 def to_primitive(value):
     if isinstance(value, Path):
         return str(value)
+    if isinstance(value, Enum):
+        return value.name
     if is_dataclass(value):
         return {
             field_info.name: to_primitive(getattr(value, field_info.name))

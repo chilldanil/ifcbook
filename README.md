@@ -3,6 +3,7 @@
 This is a runnable prototype scaffold for the MVP slice defined in the research report:
 
 Current implementation snapshot and roadmap: [PROJECT_STATUS.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PROJECT_STATUS.md)
+Next implementation phases: [NEXT_FEATURE_PLAN.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/NEXT_FEATURE_PLAN.md)
 
 - IFC ingest
 - preflight and normalization
@@ -80,7 +81,7 @@ Bundle replay mode:
 
 Not implemented yet:
 
-- exact section cutting,
+- full-class exact section cutting (current OCCT cut path is partial and profile-scoped),
 - projected visible-line extraction,
 - hidden-line suppression rules,
 - room polygon derivation,

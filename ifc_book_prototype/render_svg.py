@@ -6,12 +6,16 @@ from typing import Iterable, List, Tuple
 from .domain import (
     Bounds2D,
     GeometrySummary,
+    LineKind,
+    LineweightClass,
     NormalizedModel,
     PlannedView,
     ScheduleSheet,
     StyleProfile,
+    TypedLine2D,
     VectorPath,
     VectorPolygon,
+    typed_line_sort_key,
 )
 
 
@@ -184,6 +188,8 @@ def _info_lines(lines: Iterable[Tuple[str, str]], start_y: float) -> str:
 
 
 def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y: float, width: float, height: float) -> str:
+    if geometry.bounds is not None and geometry.linework is not None and geometry.linework.lines:
+        return _plan_linework_typed(geometry, profile, x, y, width, height)
     if geometry.bounds is not None and geometry.paths:
         return _plan_linework(geometry, profile, x, y, width, height)
 
@@ -298,6 +304,88 @@ def _vector_path_path(path: VectorPath, transform, stroke: str, stroke_width: fl
         f'<path d="{" ".join(commands)}" fill="none" '
         f'stroke="{stroke}" stroke-width="{stroke_width}" '
         f'stroke-linejoin="round" stroke-linecap="round"/>'
+    )
+
+
+_TYPED_LINEWEIGHT_KEY = {
+    LineweightClass.HEAVY: ("cut_primary", 0.35),
+    LineweightClass.MEDIUM: ("cut_secondary", 0.25),
+    LineweightClass.LIGHT: ("projected", 0.18),
+    LineweightClass.FINE: ("overhead", 0.13),
+}
+
+_TYPED_KIND_STROKE = {
+    LineKind.CUT: ("#111827", None),
+    LineKind.PROJECTED: ("#475569", None),
+    LineKind.HIDDEN: ("#475569", "1.3 1.3"),
+    LineKind.OUTLINE: ("#334155", None),
+}
+
+
+def _lineweight_for_typed_line(line: TypedLine2D, profile: StyleProfile) -> float:
+    key, default = _TYPED_LINEWEIGHT_KEY.get(line.lineweight_class, ("projected", 0.18))
+    return profile.lineweights_mm.get(key, default)
+
+
+def _plan_linework_typed(
+    geometry: GeometrySummary,
+    profile: StyleProfile,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+) -> str:
+    bounds = geometry.bounds
+    assert bounds is not None
+    assert geometry.linework is not None
+    transform = _build_transform(bounds, x, y, width, height)
+    drawing = [
+        _text(x, y - 5.0, "Plan linework from typed geometry kernel", 3.5, fill="#334155"),
+        f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
+    ]
+    # Deterministic z-order: PROJECTED -> HIDDEN -> OUTLINE -> CUT (cut on top)
+    kind_order = {LineKind.PROJECTED: 0, LineKind.HIDDEN: 1, LineKind.OUTLINE: 2, LineKind.CUT: 3}
+    sorted_lines = sorted(
+        geometry.linework.lines,
+        key=lambda line: (kind_order.get(line.kind, 9), line.z_order_hint, typed_line_sort_key(line)),
+    )
+    for line in sorted_lines:
+        if not line.points:
+            continue
+        stroke, dash = _TYPED_KIND_STROKE.get(line.kind, ("#475569", None))
+        drawing.append(
+            _typed_line_path(
+                line,
+                transform,
+                stroke=stroke,
+                stroke_width=_lineweight_for_typed_line(line, profile),
+                dash=dash,
+            )
+        )
+    drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
+    return "\n".join(drawing)
+
+
+def _typed_line_path(
+    line: TypedLine2D,
+    transform,
+    stroke: str,
+    stroke_width: float,
+    dash: str | None = None,
+) -> str:
+    commands: List[str] = []
+    start_x, start_y = transform(line.points[0].x, line.points[0].y)
+    commands.append(f"M {start_x} {start_y}")
+    for point in line.points[1:]:
+        x, y = transform(point.x, point.y)
+        commands.append(f"L {x} {y}")
+    if line.closed:
+        commands.append("Z")
+    dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+    return (
+        f'<path d="{" ".join(commands)}" fill="none" '
+        f'stroke="{stroke}" stroke-width="{stroke_width}" '
+        f'stroke-linejoin="round" stroke-linecap="round"{dash_attr}/>'
     )
 
 

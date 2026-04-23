@@ -13,14 +13,19 @@ What is real today:
 - a runnable CLI pipeline that accepts an IFC or replays an existing generated bundle,
 - deterministic preflight, normalization, view planning, schedule planning, sheet generation, and manifest emission,
 - real floor-plan linework extraction through `IfcOpenShell`'s floorplan SVG serializer,
+- **cut geometry for the configured `cut_classes` (default `IfcWall`, `IfcSlab`) derived from exact OCCT BRep sectioning, with per-element mesh-slice fallback under a configurable wall-clock budget — activated automatically when the `[occt]` extra is installed,**
+- **typed line model (`TypedLine2D` / `ViewLinework`) wired through the renderer, with explicit `LineKind` (CUT/PROJECTED/HIDDEN/OUTLINE) and `LineweightClass` (HEAVY/MEDIUM/LIGHT/FINE) classification driving stroke colors and lineweight from the style profile,**
+- **shared deterministic storey/elevation indexing helpers are now used across OCCT, serializer, and mesh geometry backends, reducing cross-backend ordering drift risk,**
+- **OCCT fallback behavior is now explicit in geometry metadata (`fallback_events`, `fallback_by_class`, timeout/exception counters) and the mesh-slice fallback produces real cut segments at the view cut plane,**
+- **byte-identical determinism CI gate over `book.pdf`, every sheet SVG, and `manifest.json` (modulo absolute output paths), running on all bundled samples via GitHub Actions,**
 - SVG-first sheet generation with `book.pdf` assembled from the generated sheet SVGs,
 - capability-driven schedule generation for openings, circulation, spaces, and structural element types,
 - bundle replay for large professional models so cached sheet bundles can be repackaged without reopening the IFC.
 
 What is still prototype-grade:
 
-- cut geometry is not yet derived from exact OCCT/BRep sectioning,
 - beyond-cut projection and hidden-line behavior still depend on `IfcOpenShell` serializer output instead of our own geometry kernel,
+- the OCCT cut backend ships first for `IfcWall` + `IfcSlab`; extending to columns, beams, doors, windows, and stairs is a one-line edit to `cut_classes` in the style profile but has not been visually validated yet,
 - annotations are limited to what can be inferred cheaply from IFC structure and current sheet logic,
 - there is no exact dimension engine, room-tag engine, or office-standard drafting ruleset yet.
 
@@ -51,14 +56,18 @@ Current pipeline stages:
 Implemented in:
 
 - [ifc_book_prototype/geometry_backend.py](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/ifc_book_prototype/geometry_backend.py)
+- [ifc_book_prototype/geometry_occt.py](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/ifc_book_prototype/geometry_occt.py)
+- [ifc_book_prototype/occt_section.py](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/ifc_book_prototype/occt_section.py)
+- [ifc_book_prototype/_ifc_index.py](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/ifc_book_prototype/_ifc_index.py)
 
 Current state:
 
-- primary backend: `IfcOpenShell` SVG floorplan serializer,
-- fallback backend: mesh-footprint approximation,
-- output: deterministic vector paths and metadata per planned view.
+- preferred backend: `CompositeGeometryBackend` — OCCT BRep section for cut linework on `cut_classes` (default `IfcWall`, `IfcSlab`) plus the serializer for projection. OCCT runs single-threaded with quantized 1e-5 m output and per-element wall-clock budget (default 2.0 s, profile-driven).
+- secondary backend: `IfcSerializerPlanBackend` (`ifcopenshell.draw`).
+- tertiary backend: mesh-footprint approximation.
+- output: deterministic vector paths, typed `ViewLinework`, and metadata per planned view.
 
-This is a major improvement over the earlier placeholder and earlier footprint-only plan extraction, but it is still not the final geometry core.
+The OCCT layer is dormant when `pythonocc-core` is not installed: the existing serializer + mesh backends remain the active fallback ladder, so the determinism gate is green either way. Goal 1's remaining work is owning projection and hidden-line generation too.
 
 ### Sheet Rendering
 
@@ -108,8 +117,9 @@ This is the current answer to large professional models that are expensive to re
 
 These are the main implementation limits right now:
 
-- no exact BRep section engine,
-- no owned hidden-line removal pipeline,
+- exact BRep sectioning is currently limited to `cut_classes` (default `IfcWall`, `IfcSlab`) and does not yet cover all major architectural/structural classes,
+- no owned projected-line and hidden-line pipeline yet (projection still comes from serializer output),
+- OCCT timeout fallback is now functional and observable, but still needs high-volume validation on larger model corpora,
 - no hatch generation,
 - no room polygon derivation,
 - no automatic dimensions,
@@ -192,11 +202,11 @@ Target:
 
 Recommended execution order from here:
 
-1. Build an exact sectioning spike on top of `IfcOpenShell + OCCT` for one floor-plan view.
-2. Add a normalized intermediate line model so geometry output is independent of the serializer format.
-3. Introduce annotation primitives and a deterministic label-placement pass.
-4. Expand style profiles from page/lineweights into drafting-rule profiles.
-5. Add bundle-level cache keys and per-stage replay metadata for expensive models.
+1. Validate the hardened OCCT cut path on larger models and profile fallback rates by class under realistic time budgets.
+2. Expand OCCT cut coverage beyond `IfcWall` / `IfcSlab` (next target: `IfcColumn`, `IfcBeam`, `IfcMember`) with visual + determinism regression checks.
+3. Start owning projected and hidden line generation in the typed line model instead of relying on serializer classification.
+4. Introduce annotation primitives and deterministic placement passes (first wave: stair direction arrows, door swings, room tags).
+5. Expand style profiles from page/lineweights into drafting-rule profiles, then add bundle-level cache keys and per-stage replay metadata for expensive models.
 
 ## Practical Status Summary
 

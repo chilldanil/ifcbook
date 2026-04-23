@@ -13,6 +13,14 @@ dependencies = []
 
 [project.optional-dependencies]
 ifc = ["ifcopenshell>=0.8.0"]
+dev = ["pytest>=8"]
+occt = ["pythonocc-core==7.8.1.1"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: long-running tests excluded from default PR gate",
+    "occt: requires pythonocc-core (Phase 2 OCCT backend)",
+]
 
 [project.scripts]
 ifc-book-prototype = "ifc_book_prototype.cli:main"
