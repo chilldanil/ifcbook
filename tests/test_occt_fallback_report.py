@@ -90,3 +90,57 @@ def test_extract_cut_lines_report_tracks_exception_fallback(monkeypatch):
     assert report.fallback_by_class == {"IfcWall": 1}
     assert len(report.lines) == 1
     assert any("raised RuntimeError" in note for note in report.lines[0].notes)
+
+
+def test_brep_from_ifc_element_accepts_direct_opencascade_geometry(monkeypatch):
+    monkeypatch.setattr(occt_section, "_require_occt", lambda: None)
+
+    class _FakeSettings:
+        def set(self, key, value):  # noqa: ARG002
+            return None
+
+    class _FakeShape:
+        def IsNull(self):
+            return False
+
+    class _FakeShapeTuple:
+        def __init__(self):
+            self.geometry = _FakeShape()
+
+    class _FakeIfcGeom:
+        def settings(self):
+            return _FakeSettings()
+
+        def create_shape(self, settings, element):  # noqa: ARG002
+            return _FakeShapeTuple()
+
+    shape = occt_section.brep_from_ifc_element(_FakeIfcGeom(), None, object())
+    assert shape is not None
+    assert hasattr(shape, "IsNull")
+
+
+def test_brep_from_ifc_element_uses_brep_data_fallback_when_needed(monkeypatch):
+    monkeypatch.setattr(occt_section, "_require_occt", lambda: None)
+    marker = object()
+    monkeypatch.setattr(occt_section, "_read_brep_text_to_shape", lambda brep_data: marker)
+
+    class _FakeSettings:
+        def set(self, key, value):  # noqa: ARG002
+            return None
+
+    class _FakeGeometry:
+        brep_data = "BREP-DATA"
+
+    class _FakeShapeTuple:
+        def __init__(self):
+            self.geometry = _FakeGeometry()
+
+    class _FakeIfcGeom:
+        def settings(self):
+            return _FakeSettings()
+
+        def create_shape(self, settings, element):  # noqa: ARG002
+            return _FakeShapeTuple()
+
+    shape = occt_section.brep_from_ifc_element(_FakeIfcGeom(), None, object())
+    assert shape is marker

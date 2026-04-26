@@ -72,6 +72,16 @@ Acceptance criteria:
 - Renderer lineweights are profile-driven only (no hardcoded drafting semantics).
 - Determinism gate remains green.
 
+Current sprint status:
+
+- Step 1 ("all-edges projection") is now implemented behind `floor_plan.own_projection` with deterministic typed-line output.
+- Step 2 (view-band clipping) is now applied in owned projection extraction using the plan's vertical band (`view_depth_below_m` .. `cut_plane_m + overhead_depth_above_m`).
+- Step 3 (HLR hidden extraction) is now wired as a best-effort path behind `floor_plan.own_hidden`; per-element failures degrade to empty hidden output without aborting the run.
+- Step 4 (owned line de-dup) is now implemented with canonical polyline keys (orientation-agnostic, deterministic) to collapse adjacent duplicate projected/hidden lines.
+- Composite backend now reports explicit projection source notes (`serializer` vs `owned`) and switches `projection_candidates` to owned per-class counts when the toggle is enabled.
+- Runtime acceptance gate is available in CLI (`--runtime-gate`) with threshold checks for fallback-event rate, timeout events total, and OCCT coverage rate.
+- Validation script defaults to the Phase 3C owned-projection profile, records per-sample runtime + gate artifacts, and emits aggregate benchmark summaries (`benchmark_summary.json` / `benchmark_summary.md`).
+
 ### Phase 4: Drawing Synthesis + Annotation MVP
 
 Scope:
@@ -97,10 +107,11 @@ Current sprint status:
   - deterministic collision-avoidance offset search is active for all three feature types,
   - displaced symbols render leader lines,
   - door symbols align to nearest wall segment when available,
+  - stair symbols now consume first semantic direction hints from `IfcStair` / `IfcStairFlight` axis/decomposition data when present, with deterministic fallback,
   - bundle replay injects deterministic overlay counts for doors/stairs/rooms from cached metadata using the same profile rules.
 - Remaining Phase 4 work is richer semantics and drafting control:
   - real door swing handedness from opening semantics (not heuristic orientation),
-  - stair run direction from path/axis semantics rather than line PCA fallback,
+  - stair run direction from richer stair-path semantics (beyond current axis/decomposition hints),
   - room labels from real IFC names/numbers and office profile mapping (currently sequential `R-###` IDs).
 
 ### Phase 5: SaaS Runtime Readiness
@@ -119,7 +130,7 @@ Acceptance criteria:
 
 ## Immediate Implementation Start (Next Sprint)
 
-1. Validate Phase 3A behavior on the large-model path and tune per-element OCCT budgets with measured fallback rates.
-2. Begin Phase 3B (`IfcColumn`, `IfcBeam`, `IfcMember`) with visual regression fixtures.
-3. Keep determinism gate (`book.pdf` + all SVG + normalized `manifest.json`) green while expanding class coverage.
-4. Move Phase 4 from profile-driven overlay controls to IFC-semantic drafting rules (door handedness, stair run direction, room label source mapping).
+1. Harden Phase 3C hidden-line quality: evaluate HLR output on large models and calibrate false-positive/false-negative behavior.
+2. Add deterministic de-duplication for owned projected/hidden lines across adjacent elements.
+3. Introduce visual regression fixtures for owned projection/hidden output (class-by-class snapshots).
+4. Continue Phase 4 semantic drafting upgrades (expand door handedness coverage beyond operation-type hints + stair run direction from IFC semantics).

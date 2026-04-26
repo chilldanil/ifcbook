@@ -246,6 +246,47 @@ def test_semantic_feature_anchors_render_without_class_paths():
     assert ">UP</text>" in svg
 
 
+def test_door_semantic_left_right_hints_produce_different_deterministic_svg():
+    profile = load_style_profile()
+    left_geometry = GeometrySummary(
+        view_id="floor_plan_01",
+        backend="ifcopenshell-svg-floorplan",
+        cut_candidates={},
+        projection_candidates={},
+        source_elements=1,
+        path_count=0,
+        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=20.0, max_y=20.0),
+        paths=[],
+        feature_anchors=[
+            FeatureAnchor2D(
+                ifc_class="IfcDoor",
+                anchor=Point2D(5.0, 5.0),
+                dir_x=1.0,
+                dir_y=0.0,
+                source_element="door-left",
+                label="door_swing:left",
+            )
+        ],
+    )
+    right_geometry = replace(
+        left_geometry,
+        feature_anchors=[
+            replace(left_geometry.feature_anchors[0], source_element="door-right", label="door_swing:right")
+        ],
+    )
+
+    left_svg_a = render_view_svg(_model(), _view(), left_geometry, profile)
+    left_svg_b = render_view_svg(_model(), _view(), left_geometry, profile)
+    right_svg_a = render_view_svg(_model(), _view(), right_geometry, profile)
+    right_svg_b = render_view_svg(_model(), _view(), right_geometry, profile)
+
+    assert left_svg_a == left_svg_b
+    assert right_svg_a == right_svg_b
+    assert left_svg_a != right_svg_a
+    assert ">D</text>" in left_svg_a
+    assert ">D</text>" in right_svg_a
+
+
 def test_room_label_mode_ifc_name_uses_semantic_label():
     profile = load_style_profile()
     overlay = replace(profile.floor_plan.feature_overlay, room_label_mode="ifc_name")

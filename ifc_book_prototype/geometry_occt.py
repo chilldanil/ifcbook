@@ -86,7 +86,7 @@ class OCCTSectionBackend:
         elements = [
             element
             for element in self._elements_by_storey.get(view.storey_name, [])
-            if element.is_a() in cut_class_set
+            if _element_matches_any_ifc_class(element, cut_class_set)
         ]
         plane = occt_section.CutPlane(
             z_m=self._storey_elevations.get(view.storey_name, view.storey_elevation_m or 0.0)
@@ -207,9 +207,23 @@ class CompositeGeometryBackend:
         occt_summary = self.occt.build_view(view)
         serializer_summary = self.serializer.build_view(view)
 
-        merged_lines: List[TypedLine2D] = []
+        base_lines: List[TypedLine2D] = []
         if occt_summary.linework is not None:
-            merged_lines.extend(occt_summary.linework.lines)
+            base_lines.extend(occt_summary.linework.lines)
+        for path in serializer_summary.paths:
+            if path.role != "projection":
+                continue
+            if not path.points:
+                continue
+            base_lines.append(
+                TypedLine2D(
+                    kind=LineKind.PROJECTED,
+                    lineweight_class=LineweightClass.LIGHT,
+                    points=list(path.points),
+                    closed=path.closed,
+                    source_ifc_class=path.ifc_class,
+                )
+            )
 
         # Phase 3C: owned projection/hidden lines (scaffold — empty until real
         # implementation lands). When ``own_projection`` is on, serializer
@@ -244,23 +258,12 @@ class CompositeGeometryBackend:
                 storey_elevation_m=storey_z,
             )
 
-        if not own_projection_on:
-            for path in serializer_summary.paths:
-                if path.role != "projection":
-                    continue
-                if not path.points:
-                    continue
-                merged_lines.append(
-                    TypedLine2D(
-                        kind=LineKind.PROJECTED,
-                        lineweight_class=LineweightClass.LIGHT,
-                        points=list(path.points),
-                        closed=path.closed,
-                        source_ifc_class=path.ifc_class,
-                    )
-                )
-        merged_lines.extend(owned_projection)
-        merged_lines.extend(owned_hidden)
+        merged_lines = geometry_projection.merge_owned_lines_into(
+            base_lines=base_lines,
+            owned_projection=owned_projection,
+            owned_hidden=owned_hidden,
+            suppress_serializer_projection=own_projection_on,
+        )
         merged_lines.sort(key=typed_line_sort_key)
 
         counts_by_kind: Dict[str, int] = {}
@@ -274,7 +277,21 @@ class CompositeGeometryBackend:
         )
 
         bounds = _union_bounds(occt_summary.bounds, serializer_summary.bounds)
-        merged_notes = sorted({*(occt_summary.notes or []), *(serializer_summary.notes or [])})
+        merged_notes_set = {*(occt_summary.notes or []), *(serializer_summary.notes or [])}
+        if own_projection_on:
+            merged_notes_set.add("Projection source: owned (serializer projection suppressed).")
+            merged_notes_set.add(
+                f"Owned projection output: {len(owned_projection)} projected line(s), "
+                f"{len(owned_hidden)} hidden line(s)."
+            )
+        else:
+            merged_notes_set.add("Projection source: serializer.")
+        merged_notes = sorted(merged_notes_set)
+        projection_candidates = (
+            _count_projection_candidates(owned_projection)
+            if own_projection_on
+            else dict(sorted(serializer_summary.projection_candidates.items()))
+        )
         feature_anchors = _merge_feature_anchors(
             serializer_summary.feature_anchors,
             occt_summary.feature_anchors,
@@ -285,7 +302,7 @@ class CompositeGeometryBackend:
             view_id=view.view_id,
             backend=self.name,
             cut_candidates=dict(sorted(occt_summary.cut_candidates.items())),
-            projection_candidates=dict(sorted(serializer_summary.projection_candidates.items())),
+            projection_candidates=projection_candidates,
             source_elements=max(occt_summary.source_elements, serializer_summary.source_elements),
             path_count=serializer_summary.path_count,
             bounds=bounds,
@@ -359,6 +376,17 @@ def _merge_feature_anchors(
     return values
 
 
+def _count_projection_candidates(lines: Sequence[TypedLine2D]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for line in lines:
+        if line.kind is not LineKind.PROJECTED:
+            continue
+        if not line.source_ifc_class:
+            continue
+        counts[line.source_ifc_class] = counts.get(line.source_ifc_class, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _bounds_from_feature_anchors(feature_anchors: Sequence[FeatureAnchor2D], padding_m: float = 2.0) -> Optional[Bounds2D]:
     if not feature_anchors:
         return None
@@ -375,6 +403,26 @@ def _bounds_from_feature_anchors(feature_anchors: Sequence[FeatureAnchor2D], pad
         max_x=max_x + pad,
         max_y=max_y + pad,
     )
+
+
+def _element_matches_any_ifc_class(element: object, class_names: Sequence[str]) -> bool:
+    for class_name in class_names:
+        try:
+            value = element.is_a(class_name)
+            if isinstance(value, bool):
+                if value:
+                    return True
+            elif isinstance(value, str) and value == class_name:
+                return True
+        except TypeError:
+            # Some mocks expose only is_a() without args.
+            continue
+        except Exception:
+            continue
+    try:
+        return str(element.is_a() or "") in set(class_names)
+    except Exception:
+        return False
 
 
 def _vertex_at(verts: Sequence[float], index: int) -> Tuple[float, float, float]:

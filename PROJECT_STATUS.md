@@ -20,6 +20,15 @@ What is real today:
 - **OCCT fallback behavior is now explicit in geometry metadata (`fallback_events`, `fallback_by_class`, timeout/exception counters) and the mesh-slice fallback produces real cut segments at the view cut plane,**
 - **`metadata/geometry_runtime_summary.json` now aggregates per-run backend usage, linework totals, and fallback rates for Phase 3A validation,**
 - **feature overlays now render deterministic door/stair/room symbols on view sheets (`D` markers with swing arcs, `UP` arrows, `R-###` room tags), with collision-avoidance offsets + leader lines and nearest-wall door alignment; IFC-semantic feature anchors (door/stair/space placement by storey) are now extracted directly and used as primary symbol anchors; overlay toggles/colors/label policy are loaded from `floor_plan.feature_overlay`; bundle replay overlays use the same profile policy and can consume serialized feature anchors,**
+- **door symbol swing side now consumes first IFC semantic hints from `IfcDoor.OperationType` / `UserDefinedOperationType` (`left`/`right`) when available, while preserving deterministic fallback behavior when semantics are missing,**
+- **stair symbol direction now prefers IFC semantic axis/decomposition hints (`IfcStair` / `IfcStairFlight` Axis representation and related-flight inheritance) with deterministic fallback to placement orientation,**
+- **Phase 3C step 1 owned projection is now live behind `floor_plan.own_projection`: composite geometry can suppress serializer projection, merge owned projected/hidden typed lines, and emit projection-source notes + owned per-class projection counts in metadata,**
+- **Phase 3C step 2 view-band clipping is now active in owned projection and owned hidden extraction, so owned linework respects the plan vertical slice band,**
+- **Phase 3C step 3 best-effort HLR hidden extraction is now wired behind `floor_plan.own_hidden` (safe degrade to empty hidden output when OCCT/HLR path is unavailable per run/element),**
+- **Phase 3C step 4 owned projected/hidden line de-duplication is now active (canonical orientation-agnostic polyline keys) to reduce adjacent-element duplicate edges while keeping deterministic output,**
+- **runtime acceptance gating is now available via CLI (`--runtime-gate`) with threshold checks for fallback-event rate, timeout events total, and OCCT coverage rate, with machine-readable gate output for CI/worker integration,**
+- **multi-sample benchmark aggregation is now available (`python -m ifc_book_prototype.benchmark`) and the OCCT validation script emits both JSON and Markdown benchmark summaries,**
+- **`--plan-next` can now emit CI-ready planning dashboard artifacts in Markdown, JSON, and SVG (`--plan-next-out`, `--plan-next-json-out`, `--plan-next-svg-out`),**
 - **byte-identical determinism CI gate over `book.pdf`, every sheet SVG, and `manifest.json` (modulo absolute output paths), running on all bundled samples via GitHub Actions,**
 - SVG-first sheet generation with `book.pdf` assembled from the generated sheet SVGs,
 - capability-driven schedule generation for openings, circulation, spaces, and structural element types,
@@ -27,11 +36,11 @@ What is real today:
 
 What is still prototype-grade:
 
-- beyond-cut projection and hidden-line behavior still depend on `IfcOpenShell` serializer output instead of our own geometry kernel,
+- owned hidden extraction is now present but still early-quality (HLR tuning + de-dup + robust validation on large models is pending),
 - the OCCT cut backend now defaults to `IfcWall`, `IfcSlab`, `IfcColumn`, `IfcBeam`, `IfcMember`; extending to doors, windows, and stairs is a one-line edit to `cut_classes` in the style profile but has not been visually validated yet,
-- owned projection and hidden line generation is scaffolded behind the `floor_plan.own_projection` / `floor_plan.own_hidden` profile toggles (default off) — the real implementation is Phase 3C work,
+- owned projection/hidden are still opt-in profile toggles (`floor_plan.own_projection` / `floor_plan.own_hidden`) and are not yet default production path,
 - annotations are limited to what can be inferred cheaply from IFC structure and current sheet logic,
-- semantic annotation placement is deterministic and now anchored on IFC placements, but still heuristic in parts (door handedness, stair run direction, and room label source policy still need refinement),
+- semantic annotation placement is deterministic and now anchored on IFC placements, but still heuristic in parts (stair run direction is now partially semantic via axis/decomposition hints but not full stair-path semantics; room label source policy still needs refinement; door handedness coverage is partial via operation-type semantics),
 - there is no exact dimension engine, room-tag engine, or office-standard drafting ruleset yet.
 
 ## What We Have Now

@@ -24,6 +24,8 @@ markers = [
 
 [project.scripts]
 ifc-book-prototype = "ifc_book_prototype.cli:main"
+ifc-book-prototype-ui = "ifc_book_prototype.ui:main"
+ifc-book-benchmark = "ifc_book_prototype.benchmark:main"
 
 [tool.setuptools]
 include-package-data = true

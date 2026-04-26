@@ -1,0 +1,66 @@
+{
+  "profile_id": "din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden_fast_validation",
+  "region": "DIN/ISO",
+  "page": {
+    "width_mm": 210.0,
+    "height_mm": 297.0,
+    "margin_mm": 12.0,
+    "title_block_height_mm": 20.0
+  },
+  "lineweights_mm": {
+    "cut_primary": 0.35,
+    "cut_secondary": 0.25,
+    "projected": 0.18,
+    "overhead": 0.13
+  },
+  "floor_plan": {
+    "cut_plane_m": 1.1,
+    "view_depth_below_m": 0.2,
+    "overhead_depth_above_m": 2.3,
+    "include_classes": [
+      "IfcWall",
+      "IfcSlab",
+      "IfcColumn",
+      "IfcBeam",
+      "IfcMember",
+      "IfcDoor",
+      "IfcWindow",
+      "IfcStair"
+    ],
+    "cut_classes": ["IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", "IfcMember"],
+    "occt_per_element_budget_s": 0.15,
+    "cut_chord_tolerance_m": 0.0005,
+    "highlight_fallback_lines": false,
+    "own_projection": true,
+    "own_hidden": true,
+    "feature_overlay": {
+      "enabled": true,
+      "show_legend": true,
+      "leader_enabled": true,
+      "doors_enabled": true,
+      "stairs_enabled": true,
+      "rooms_enabled": true,
+      "max_door_markers": 120,
+      "max_stair_arrows": 60,
+      "max_room_tags": 80,
+      "door_color": "#1d4ed8",
+      "stair_color": "#0f766e",
+      "room_fill_color": "#ffffff",
+      "room_stroke_color": "#b45309",
+      "room_text_color": "#92400e",
+      "legend_color": "#334155",
+      "leader_color": "#94a3b8",
+      "leader_stroke_width": 0.16,
+      "leader_dasharray": "0.7 0.7",
+      "door_label": "D",
+      "stair_label": "UP",
+      "room_label_mode": "sequential",
+      "room_label_prefix": "R",
+      "room_label_start": 1,
+      "room_fixed_label": "ROOM"
+    }
+  },
+  "sheet_prefix": "A",
+  "cover_sheet_id": "A-000",
+  "index_sheet_id": "A-001"
+}

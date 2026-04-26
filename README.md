@@ -48,6 +48,89 @@ Or call the CLI directly:
 python -m ifc_book_prototype.cli path/to/model.ifc --out out/job-001
 ```
 
+Summarize runtime counters from an existing run:
+
+```bash
+python -m ifc_book_prototype.cli --summarize-runtime out/job-001
+```
+
+Run the acceptance gate (returns non-zero on violations):
+
+```bash
+python -m ifc_book_prototype.cli \
+  --runtime-gate out/job-001 \
+  --max-fallback-event-rate 0.20 \
+  --max-timeout-events-total 0 \
+  --min-occt-coverage-rate 0.50 \
+  --min-hidden-lines-total 100 \
+  --min-hidden-line-ratio 0.05
+```
+
+Machine-readable output is emitted as `RUNTIME_GATE_JSON=<json>` for CI parsing, including hidden-line metrics (`hidden_lines_total`, `hidden_line_ratio`).
+
+Run multi-sample OCCT validation + benchmark summary:
+
+```bash
+bash scripts/run_occt_validation.sh
+```
+
+This writes:
+
+- `out/occt_validation/<sample>/metadata/benchmark_runtime.json`
+- `out/occt_validation/<sample>/metadata/runtime_gate_result.json`
+- `out/occt_validation/benchmark_summary.json`
+- `out/occt_validation/benchmark_summary.md`
+- `out/occt_validation/next_steps.md`
+- `out/occt_validation/next_steps.json`
+- `out/occt_validation/next_steps.svg`
+
+`benchmark_summary.{json,md}` now also includes hidden-line progress metrics (`hidden_lines_total`, `hidden_line_ratio`) in aggregate and per-sample sections.
+
+Generate an actionable next-step plan from existing run artifacts:
+
+```bash
+python -m ifc_book_prototype.cli \
+  --plan-next out/occt_validation \
+  --plan-next-out out/occt_validation/next_steps.md \
+  --plan-next-json-out out/occt_validation/next_steps.json \
+  --plan-next-svg-out out/occt_validation/next_steps.svg
+```
+
+This prints aggregate medians and a deterministic numbered recommendation list, and can emit markdown/JSON/SVG planning artifacts for CI dashboards.
+
+You can also aggregate any existing run root directly:
+
+```bash
+python -m ifc_book_prototype.benchmark out/occt_validation --strict-gate
+```
+
+Optional env overrides:
+
+```bash
+MAX_FALLBACK_EVENT_RATE=0.20 \
+MAX_TIMEOUT_EVENTS_TOTAL=0 \
+MIN_OCCT_COVERAGE_RATE=0.50 \
+MIN_HIDDEN_LINES_TOTAL=100 \
+MIN_HIDDEN_LINE_RATIO=0.05 \
+PROFILE_PATH=ifc_book_prototype/profiles/din_iso_arch_floor_plan_v3_phase3c_owned_projection.json \
+bash scripts/run_occt_validation.sh
+```
+
+For a simple desktop UI (file pickers + run log + quick open of output folder/PDF):
+
+```bash
+python -m ifc_book_prototype.ui
+```
+
+Or, after editable/package install:
+
+```bash
+ifc-book-prototype-ui
+```
+
+The UI supports both IFC mode and bundle replay mode, and it invokes the same pipeline path as the CLI.
+It also includes post-run controls for runtime-gate evaluation and benchmark-summary generation (without leaving the desktop app).
+
 For large professional models where you already have a generated artifact bundle, replay the bundle without reopening the IFC:
 
 ```bash
@@ -62,6 +145,18 @@ To run the opt-in Phase 3B cut-class expansion profile (adds `IfcColumn`, `IfcBe
 
 ```bash
 python -m ifc_book_prototype path/to/model.ifc --out out/job-001 --profile ifc_book_prototype/profiles/din_iso_arch_floor_plan_v2_phase3b.json
+```
+
+To run the opt-in Phase 3C owned projection profile (suppresses serializer projection and uses owned projected line extraction when OCCT is available):
+
+```bash
+python -m ifc_book_prototype path/to/model.ifc --out out/job-001 --profile ifc_book_prototype/profiles/din_iso_arch_floor_plan_v3_phase3c_owned_projection.json
+```
+
+To run the opt-in Phase 3C owned projection + hidden profile:
+
+```bash
+python -m ifc_book_prototype path/to/model.ifc --out out/job-001 --profile ifc_book_prototype/profiles/din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden.json
 ```
 
 To see profile-driven annotation behavior (doors disabled, fixed room label `SPACE`):

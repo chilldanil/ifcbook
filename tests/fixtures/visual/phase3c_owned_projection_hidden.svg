@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210.0mm" height="297.0mm" viewBox="0 0 210.0 297.0">
+  <rect x="0" y="0" width="210.0" height="297.0" fill="#faf8f2"/>
+  <rect x="12.0" y="12.0" width="186.0" height="253.0" fill="#fffefb" stroke="#0f172a" stroke-width="0.35"/>
+  <rect x="12.0" y="265.0" width="186.0" height="20.0" fill="#f2efe6" stroke="#0f172a" stroke-width="0.35"/>
+  <text x="16.0" y="18.0" font-size="7.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Floor Plan - L1</text>
+  <text x="16.0" y="25.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#334155">Real IFC-driven floor-plan linework prototype</text>
+  <text x="20.0" y="33.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#334155">Plan linework from typed geometry kernel</text>
+<rect x="20.0" y="38.0" width="170.0" height="150.0" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>
+<path d="M 24.0 133.25 L 186.0 133.25" fill="none" stroke="#475569" stroke-width="0.18" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 34.125 102.875 L 175.875 102.875" fill="none" stroke="#475569" stroke-width="0.13" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="1.3 1.3"/>
+<path d="M 24.0 173.75 L 186.0 173.75" fill="none" stroke="#111827" stroke-width="0.35" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="44.25" cy="173.75" r="0.95" fill="#ffffff" stroke="#1d4ed8" stroke-width="0.24"/>
+<line x1="44.25" y1="173.75" x2="44.25" y2="170.15" stroke="#1d4ed8" stroke-width="0.24"/>
+<path d="M 44.25 170.15 L 43.543 170.22 L 42.863 170.428 L 42.237 170.765 L 41.69 171.219 L 41.242 171.772 L 40.912 172.401" fill="none" stroke="#1d4ed8" stroke-width="0.22" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="41.595632290866426" y="173.9007868131682" font-size="2.3" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#1d4ed8">D</text>
+<rect x="119.85" y="90.35" width="10.8" height="4.8" fill="#ffffff" stroke="#b45309" stroke-width="0.22" rx="0.7" ry="0.7"/>
+<text x="123.2" y="93.55" font-size="2.2" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#92400e">R-001</text>
+<text x="22.0" y="42.5" font-size="2.8" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#334155">Feature overlay | Doors: 1 | Stairs: 0 | Rooms: 1</text>
+<text x="22.0" y="185.0" font-size="2.7" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#475569">world extents 8.00m x 6.00m</text>
+<text x="20.0" y="205.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey</text>
+<text x="58.0" y="205.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">L1</text>
+<text x="20.0" y="213.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey elev. (m)</text>
+<text x="58.0" y="213.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0.00</text>
+<text x="20.0" y="221.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut plane (m)</text>
+<text x="58.0" y="221.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1.10</text>
+<text x="20.0" y="229.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Geometry backend</text>
+<text x="58.0" y="229.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">composite-occt+serializer</text>
+<text x="20.0" y="237.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Source elements</text>
+<text x="58.0" y="237.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">3</text>
+<text x="20.0" y="245.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Line paths</text>
+<text x="58.0" y="245.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
+<text x="20.0" y="253.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Door markers</text>
+<text x="58.0" y="253.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1</text>
+<text x="20.0" y="261.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Stair arrows</text>
+<text x="58.0" y="261.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
+<text x="20.0" y="269.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Room tags</text>
+<text x="58.0" y="269.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1</text>
+<text x="20.0" y="277.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut classes</text>
+<text x="58.0" y="277.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
+<text x="20.0" y="285.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Proj. classes</text>
+<text x="58.0" y="285.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
+<text x="20.0" y="257.0" font-size="4.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Notes</text>
+<text x="20.0" y="263.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Projection source: owned (serializer projection suppressed).</text>
+<text x="20.0" y="269.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Owned projection output: 1 projected line(s), 1 hidden line(s).</text>
+  <text x="16.0" y="272.0" font-size="6.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">A-101</text>
+  <text x="40.0" y="272.0" font-size="4.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Floor Plan - L1</text>
+  <text x="166.0" y="272.0" font-size="3.8" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden</text>
+  <text x="166.0" y="278.0" font-size="3.2" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#334155">Generated by ifc-book-prototype</text>
+</svg>

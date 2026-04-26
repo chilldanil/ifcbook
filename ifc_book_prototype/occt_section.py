@@ -220,6 +220,80 @@ def build_cut_face(plane: CutPlane, xy_extent_m: float):
     return maker.Face()
 
 
+def _set_ifc_geom_setting(local_settings, key_name: str, value) -> bool:
+    """Set an IfcOpenShell geometry setting across old/new APIs.
+
+    Older bindings expose enum-like attributes such as ``USE_WORLD_COORDS``.
+    Newer bindings use string keys such as ``use-world-coords``.
+    """
+    # Old API: settings.set(settings.USE_WORLD_COORDS, True)
+    if hasattr(local_settings, key_name):
+        try:
+            local_settings.set(getattr(local_settings, key_name), value)
+            return True
+        except Exception:
+            pass
+
+    # New API: settings.set("use-world-coords", True)
+    key_hyphen = key_name.lower().replace("_", "-")
+    for candidate in (key_hyphen, key_name):
+        try:
+            local_settings.set(candidate, value)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _read_brep_text_to_shape(brep_data: str):
+    """Deserialize ASCII BRep text into ``TopoDS_Shape``."""
+    builder = BRep_Builder()
+    shape = TopoDS_Shape()
+    # `breptools_Read` can take a string buffer in many bindings; we use a
+    # tmpfile path as the most portable form across OCCT versions.
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".brep", delete=False) as handle:
+        handle.write(brep_data)
+        tmp_path = handle.name
+    try:
+        ok = breptools_Read(shape, tmp_path, builder)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+    if not ok:
+        return None
+    try:
+        if shape.IsNull():
+            return None
+    except Exception:
+        pass
+    return shape
+
+
+def _coerce_occt_shape(raw) -> Optional[object]:
+    """Extract an OCCT shape from IfcOpenShell return values."""
+    if raw is None:
+        return None
+
+    # New API path: create_shape(...).geometry is already a TopoDS_Shape.
+    if hasattr(raw, "IsNull"):
+        try:
+            if raw.IsNull():
+                return None
+        except Exception:
+            pass
+        return raw
+
+    # Old API path: create_shape(...).geometry.brep_data contains ASCII BRep.
+    brep_data = getattr(raw, "brep_data", None)
+    if isinstance(brep_data, str) and brep_data.strip():
+        return _read_brep_text_to_shape(brep_data)
+    return None
+
+
 def brep_from_ifc_element(ifc_geom_module, settings, element):
     """Materialize an OCCT shape for an IFC element via the BRep round-trip.
 
@@ -227,40 +301,30 @@ def brep_from_ifc_element(ifc_geom_module, settings, element):
     """
     _require_occt()
     try:
-        # USE_BREP_DATA returns serialized BRep text we can deserialize via
-        # the breptools ASCII reader.
+        # New IfcOpenShell versions can return a native TopoDS shape directly
+        # (`use-python-opencascade`). Older versions expose `USE_BREP_DATA`.
         local_settings = ifc_geom_module.settings()
-        local_settings.set(local_settings.USE_BREP_DATA, True)
-        local_settings.set(local_settings.USE_WORLD_COORDS, True)
+        _set_ifc_geom_setting(local_settings, "USE_WORLD_COORDS", True)
+        _set_ifc_geom_setting(local_settings, "USE_PYTHON_OPENCASCADE", True)
+        _set_ifc_geom_setting(local_settings, "USE_BREP_DATA", True)
         # Allow caller to override common knobs by passing a pre-built settings.
         if settings is not None:
-            try:
-                if settings.get(settings.USE_WORLD_COORDS):
-                    local_settings.set(local_settings.USE_WORLD_COORDS, True)
-            except Exception:
-                pass
+            for key_name in ("USE_WORLD_COORDS", "USE_PYTHON_OPENCASCADE", "USE_BREP_DATA"):
+                try:
+                    source_key = getattr(settings, key_name)
+                except Exception:
+                    source_key = key_name.lower().replace("_", "-")
+                try:
+                    value = settings.get(source_key)
+                except Exception:
+                    continue
+                _set_ifc_geom_setting(local_settings, key_name, value)
+
         shape_iter = ifc_geom_module.create_shape(local_settings, element)
-        brep_data = shape_iter.geometry.brep_data
-        if not brep_data:
-            return None
-        builder = BRep_Builder()
-        shape = TopoDS_Shape()
-        # `breptools_Read` can take a string buffer in many bindings; we use a
-        # tmpfile path as the most portable form across OCCT versions.
-        import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".brep", delete=False) as handle:
-            handle.write(brep_data)
-            tmp_path = handle.name
-        try:
-            ok = breptools_Read(shape, tmp_path, builder)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-        if not ok:
-            return None
-        return shape
+        direct_shape = _coerce_occt_shape(shape_iter)
+        if direct_shape is not None:
+            return direct_shape
+        return _coerce_occt_shape(getattr(shape_iter, "geometry", None))
     except Exception as exc:
         _LOG.debug("brep_from_ifc_element failed: %s", exc)
         return None

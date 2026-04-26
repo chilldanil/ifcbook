@@ -495,12 +495,14 @@ def _feature_annotations(
     for primitive in door_markers:
         anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
         ux, uy = _feature_direction_screen(transform, primitive)
+        door_swing_sign = _door_swing_sign_from_label(primitive.label)
         sx, sy, bbox, moved = _resolve_symbol_placement(
             symbol_kind="door",
             anchor_sx=anchor_sx,
             anchor_sy=anchor_sy,
             ux=ux,
             uy=uy,
+            door_swing_sign=door_swing_sign,
             offsets=offsets,
             placed_boxes=placed_boxes,
             frame=frame,
@@ -518,6 +520,7 @@ def _feature_annotations(
                 sy,
                 ux,
                 uy,
+                swing_sign=door_swing_sign,
                 color=overlay.door_color,
                 label_text=overlay.door_label.strip() or "D",
             )
@@ -910,18 +913,19 @@ def _resolve_symbol_placement(
     placed_boxes: List[Tuple[float, float, float, float]],
     frame: Tuple[float, float, float, float],
     label: str | None = None,
+    door_swing_sign: float = 1.0,
 ) -> Tuple[float, float, Tuple[float, float, float, float], bool]:
     for dx, dy in offsets:
         sx = anchor_sx + dx
         sy = anchor_sy + dy
-        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label)
+        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label, door_swing_sign=door_swing_sign)
         if not _bbox_inside(bbox, frame):
             continue
         if any(_bbox_intersects(bbox, existing, padding=0.6) for existing in placed_boxes):
             continue
         moved = abs(dx) > 1.0e-9 or abs(dy) > 1.0e-9
         return sx, sy, bbox, moved
-    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label)
+    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label, door_swing_sign=door_swing_sign)
     return anchor_sx, anchor_sy, fallback_bbox, False
 
 
@@ -932,9 +936,10 @@ def _symbol_bbox(
     ux: float,
     uy: float,
     label: str | None = None,
+    door_swing_sign: float = 1.0,
 ) -> Tuple[float, float, float, float]:
     if symbol_kind == "door":
-        points = _door_anchor_points(sx, sy, ux, uy)
+        points = _door_anchor_points(sx, sy, ux, uy, swing_sign=door_swing_sign)
         margin = 1.3
     elif symbol_kind == "stair":
         points = _stair_anchor_points(sx, sy, ux, uy)
@@ -975,18 +980,20 @@ def _door_symbol(
     sy: float,
     ux: float,
     uy: float,
+    swing_sign: float,
     color: str,
     label_text: str,
 ) -> List[str]:
     drawing: List[str] = []
     leaf_len = 3.6
     open_angle_deg = 68.0
+    open_angle = math.radians(open_angle_deg) * (-1.0 if swing_sign < 0.0 else 1.0)
     ex = sx + ux * leaf_len
     ey = sy + uy * leaf_len
-    vx, vy = _rotate(ux, uy, math.radians(open_angle_deg))
+    vx, vy = _rotate(ux, uy, open_angle)
     arc_points = []
     for idx in range(7):
-        angle = math.radians(open_angle_deg) * (idx / 6.0)
+        angle = open_angle * (idx / 6.0)
         rx, ry = _rotate(ux, uy, angle)
         arc_points.append((sx + rx * leaf_len, sy + ry * leaf_len))
     commands = [f"M {round(arc_points[0][0], 3)} {round(arc_points[0][1], 3)}"]
@@ -1062,20 +1069,38 @@ def _room_tag_symbol(
     ]
 
 
-def _door_anchor_points(sx: float, sy: float, ux: float, uy: float) -> List[Tuple[float, float]]:
+def _door_anchor_points(
+    sx: float,
+    sy: float,
+    ux: float,
+    uy: float,
+    swing_sign: float = 1.0,
+) -> List[Tuple[float, float]]:
     leaf_len = 3.6
     open_angle_deg = 68.0
+    open_angle = math.radians(open_angle_deg) * (-1.0 if swing_sign < 0.0 else 1.0)
     ex = sx + ux * leaf_len
     ey = sy + uy * leaf_len
-    vx, vy = _rotate(ux, uy, math.radians(open_angle_deg))
+    vx, vy = _rotate(ux, uy, open_angle)
     label_x = sx + vx * 2.0 - 0.8
     label_y = sy + vy * 2.0 + 0.9
     points: List[Tuple[float, float]] = [(sx, sy), (ex, ey), (label_x, label_y)]
     for idx in range(7):
-        angle = math.radians(open_angle_deg) * (idx / 6.0)
+        angle = open_angle * (idx / 6.0)
         rx, ry = _rotate(ux, uy, angle)
         points.append((sx + rx * leaf_len, sy + ry * leaf_len))
     return points
+
+
+def _door_swing_sign_from_label(label: str | None) -> float:
+    if not label:
+        return 1.0
+    hint = label.strip().lower()
+    if hint.startswith("door_swing:"):
+        hint = hint.split(":", 1)[1].strip()
+    if hint == "left":
+        return -1.0
+    return 1.0
 
 
 def _stair_anchor_points(sx: float, sy: float, ux: float, uy: float) -> List[Tuple[float, float]]:

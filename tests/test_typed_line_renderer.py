@@ -132,3 +132,28 @@ def test_typed_renderer_omits_when_linework_absent():
     svg = render_view_svg(_make_model(), _make_view(), geometry, profile)
     assert "IfcOpenShell floorplan serializer" in svg
     assert "typed geometry kernel" not in svg
+
+
+def test_typed_renderer_hidden_line_uses_dash_pattern():
+    profile = load_style_profile()
+    hidden_line = TypedLine2D(
+        kind=LineKind.HIDDEN,
+        lineweight_class=LineweightClass.FINE,
+        points=[Point2D(0.0, 0.0), Point2D(2.0, 0.0)],
+        source_ifc_class="IfcWall",
+        source_element="0xHIDDEN",
+    )
+    linework = ViewLinework(lines=[hidden_line], counts_by_kind={"HIDDEN": 1})
+    geometry = GeometrySummary(
+        view_id="floor_plan_01",
+        backend="test",
+        cut_candidates={},
+        projection_candidates={},
+        source_elements=1,
+        path_count=0,
+        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=2.0, max_y=1.0),
+        linework=linework,
+        linework_counts={"HIDDEN": 1},
+    )
+    svg = render_view_svg(_make_model(), _make_view(), geometry, profile)
+    assert "stroke-dasharray=\"1.3 1.3\"" in svg
