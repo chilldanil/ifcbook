@@ -225,10 +225,10 @@ class CompositeGeometryBackend:
                 )
             )
 
-        # Phase 3C: owned projection/hidden lines (scaffold — empty until real
-        # implementation lands). When ``own_projection`` is on, serializer
-        # projection is suppressed even if owned output is empty; this is the
-        # "own it or bust" contract documented in ``geometry_projection``.
+        # Phase 3C: owned projection/hidden lines. When ``own_projection`` is
+        # on, serializer projection is suppressed even if owned output is empty;
+        # this is the "own it or bust" contract documented in
+        # ``geometry_projection``.
         profile = getattr(self.occt, "profile", None)
         ifc_geom = getattr(self.occt, "_ifc_geom", None)
         storey_elevations = getattr(self.occt, "_storey_elevations", {}) or {}
@@ -236,6 +236,8 @@ class CompositeGeometryBackend:
         own_projection_on = profile is not None and geometry_projection.owned_projection_enabled(profile)
         owned_projection: List[TypedLine2D] = []
         owned_hidden: List[TypedLine2D] = []
+        owned_projection_telemetry = geometry_projection.OwnedLineTelemetry()
+        owned_hidden_telemetry = geometry_projection.OwnedLineTelemetry()
         if profile is not None:
             storey_z = storey_elevations.get(view.storey_name, 0.0)
             # Owned projection walks the same element set the cut extractor
@@ -243,20 +245,24 @@ class CompositeGeometryBackend:
             # but step 1 deliberately walks ALL included_classes since the
             # projection target is beyond-cut geometry, not just cut elements.
             storey_elements = list(elements_by_storey.get(view.storey_name, []))
-            owned_projection = geometry_projection.extract_owned_projection_lines(
+            owned_projection_report = geometry_projection.extract_owned_projection_report(
                 view=view,
                 profile=profile,
                 elements=storey_elements,
                 ifc_geom_module=ifc_geom,
                 storey_elevation_m=storey_z,
             )
-            owned_hidden = geometry_projection.extract_owned_hidden_lines(
+            owned_hidden_report = geometry_projection.extract_owned_hidden_report(
                 view=view,
                 profile=profile,
                 elements=storey_elements,
                 ifc_geom_module=ifc_geom,
                 storey_elevation_m=storey_z,
             )
+            owned_projection = owned_projection_report.lines
+            owned_hidden = owned_hidden_report.lines
+            owned_projection_telemetry = owned_projection_report.telemetry
+            owned_hidden_telemetry = owned_hidden_report.telemetry
 
         merged_lines = geometry_projection.merge_owned_lines_into(
             base_lines=base_lines,
@@ -284,8 +290,12 @@ class CompositeGeometryBackend:
                 f"Owned projection output: {len(owned_projection)} projected line(s), "
                 f"{len(owned_hidden)} hidden line(s)."
             )
+            merged_notes_set.add(_format_owned_telemetry_note("projection", owned_projection_telemetry))
         else:
             merged_notes_set.add("Projection source: serializer.")
+        own_hidden_on = profile is not None and geometry_projection.owned_hidden_enabled(profile)
+        if own_hidden_on:
+            merged_notes_set.add(_format_owned_telemetry_note("hidden", owned_hidden_telemetry))
         merged_notes = sorted(merged_notes_set)
         projection_candidates = (
             _count_projection_candidates(owned_projection)
@@ -311,6 +321,10 @@ class CompositeGeometryBackend:
             notes=merged_notes,
             linework=linework,
             linework_counts=dict(counts_by_kind),
+            owned_geometry_telemetry={
+                "projection": owned_projection_telemetry.as_dict(),
+                "hidden": owned_hidden_telemetry.as_dict(),
+            },
             fallback_events=occt_summary.fallback_events,
             fallback_by_class=dict(occt_summary.fallback_by_class),
             fallback_timeout_events=occt_summary.fallback_timeout_events,
@@ -385,6 +399,27 @@ def _count_projection_candidates(lines: Sequence[TypedLine2D]) -> Dict[str, int]
             continue
         counts[line.source_ifc_class] = counts.get(line.source_ifc_class, 0) + 1
     return dict(sorted(counts.items()))
+
+
+def _format_owned_telemetry_note(kind: str, telemetry: geometry_projection.OwnedLineTelemetry) -> str:
+    return (
+        f"Owned {kind} telemetry: "
+        f"attempted={telemetry.attempted_elements}, "
+        f"emitted={telemetry.emitted_lines}, "
+        f"skipped={telemetry.skipped_elements}, "
+        f"failed={telemetry.failed_elements}; "
+        f"attempted_by_class={_format_class_counts(telemetry.attempted_by_class)}, "
+        f"emitted_by_class={_format_class_counts(telemetry.emitted_by_class)}, "
+        f"skipped_by_class={_format_class_counts(telemetry.skipped_by_class)}, "
+        f"failed_by_class={_format_class_counts(telemetry.failed_by_class)}."
+    )
+
+
+def _format_class_counts(counts: Dict[str, int]) -> str:
+    if not counts:
+        return "{}"
+    pairs = [f"{key}:{value}" for key, value in sorted(counts.items())]
+    return "{" + ",".join(pairs) + "}"
 
 
 def _bounds_from_feature_anchors(feature_anchors: Sequence[FeatureAnchor2D], padding_m: float = 2.0) -> Optional[Bounds2D]:

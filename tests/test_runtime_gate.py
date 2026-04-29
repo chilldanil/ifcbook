@@ -133,6 +133,27 @@ def test_evaluate_runtime_gate_fails_and_supports_legacy_timeout_key():
     assert len(result.as_dict()["reasons"]) == 3
 
 
+def test_evaluate_runtime_gate_prefers_corrected_occt_coverage_count():
+    result = evaluate_runtime_gate(
+        {
+            "view_count": 5,
+            "occt_view_count": 5,
+            "occt_coverage_view_count": 3,
+            "fallback": {
+                "events_total": 0,
+                "timeout_events_total": 0,
+            },
+        },
+        thresholds=RuntimeGateThresholds(min_occt_coverage_rate=0.8),
+        run_dir=Path("/tmp/run"),
+        summary_path=Path("/tmp/run/metadata/geometry_runtime_summary.json"),
+    )
+
+    assert result.passed is False
+    assert result.occt_view_count == 3
+    assert result.occt_coverage_rate == pytest.approx(0.6)
+
+
 def test_evaluate_runtime_gate_from_run_dir_missing_summary(tmp_path: Path):
     with pytest.raises(FileNotFoundError, match="geometry_runtime_summary.json"):
         evaluate_runtime_gate_from_run_dir(

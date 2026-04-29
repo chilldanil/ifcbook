@@ -16,14 +16,16 @@ def summarize_geometry_runtime(geometry_items: Iterable[object]) -> dict:
     fallback_empty_events_total = 0
     view_count = 0
     occt_view_count = 0
+    owned_geometry = {
+        "projection": _empty_owned_totals(),
+        "hidden": _empty_owned_totals(),
+    }
 
     for item in geometry_items:
         view_count += 1
         view_id = _field(item, "view_id", "")
         backend = _field(item, "backend", "")
         backend_counts[backend] = backend_counts.get(backend, 0) + 1
-        if "occt" in backend.lower():
-            occt_view_count += 1
 
         fallback_events = int(_field(item, "fallback_events", 0) or 0)
         fallback_timeout = int(_field(item, "fallback_timeout_events", 0) or 0)
@@ -40,11 +42,15 @@ def summarize_geometry_runtime(geometry_items: Iterable[object]) -> dict:
         _merge_counts(linework_counts_total, _field(item, "linework_counts", {}))
         _merge_counts(cut_candidates_total, _field(item, "cut_candidates", {}))
         _merge_counts(projection_candidates_total, _field(item, "projection_candidates", {}))
+        if _is_occt_covered_view(item, backend, fallback_events):
+            occt_view_count += 1
+        _merge_owned_geometry(owned_geometry, _field(item, "owned_geometry_telemetry", {}))
 
     return {
         "view_count": view_count,
         "backend_counts": dict(sorted(backend_counts.items())),
         "occt_view_count": occt_view_count,
+        "occt_coverage_view_count": occt_view_count,
         "fallback": {
             "events_total": fallback_events_total,
             "views_with_fallback_count": len(views_with_fallback),
@@ -57,6 +63,7 @@ def summarize_geometry_runtime(geometry_items: Iterable[object]) -> dict:
         "linework_counts_total": dict(sorted(linework_counts_total.items())),
         "cut_candidates_total": dict(sorted(cut_candidates_total.items())),
         "projection_candidates_total": dict(sorted(projection_candidates_total.items())),
+        "owned_geometry": owned_geometry,
     }
 
 
@@ -74,3 +81,39 @@ def _merge_counts(target: Dict[str, int], source: object) -> None:
         value = int(raw_value)
         target[key_s] = target.get(key_s, 0) + value
 
+
+def _is_occt_covered_view(item: object, backend: object, fallback_events: int) -> bool:
+    if "occt" not in str(backend).lower():
+        return False
+    linework_counts: Dict[str, int] = {}
+    _merge_counts(linework_counts, _field(item, "linework_counts", {}))
+    if sum(linework_counts.values()) > 0:
+        return True
+    return fallback_events > 0
+
+
+def _empty_owned_totals() -> dict:
+    return {
+        "attempted_elements": 0,
+        "emitted_lines": 0,
+        "skipped_elements": 0,
+        "failed_elements": 0,
+        "attempted_by_class": {},
+        "emitted_by_class": {},
+        "skipped_by_class": {},
+        "failed_by_class": {},
+    }
+
+
+def _merge_owned_geometry(target: dict, source: object) -> None:
+    if not isinstance(source, Mapping):
+        return
+    for kind in ("projection", "hidden"):
+        kind_source = source.get(kind, {})
+        if not isinstance(kind_source, Mapping):
+            continue
+        kind_target = target[kind]
+        for key in ("attempted_elements", "emitted_lines", "skipped_elements", "failed_elements"):
+            kind_target[key] += int(kind_source.get(key, 0) or 0)
+        for key in ("attempted_by_class", "emitted_by_class", "skipped_by_class", "failed_by_class"):
+            _merge_counts(kind_target[key], kind_source.get(key, {}))

@@ -64,3 +64,66 @@ def test_summarize_geometry_runtime_from_dicts():
     assert summary["fallback"]["by_class"] == {"IfcSlab": 1}
     assert summary["linework_counts_total"] == {"CUT": 1}
 
+
+def test_summarize_geometry_runtime_does_not_cover_empty_occt_elevation():
+    summary = summarize_geometry_runtime(
+        [
+            {
+                "view_id": "elevation_north",
+                "backend": "occt-elevation-edges",
+                "source_elements": 0,
+                "linework_counts": {},
+                "fallback_events": 0,
+            },
+            {
+                "view_id": "floor_plan_01",
+                "backend": "composite-occt+serializer",
+                "linework_counts": {"CUT": 1},
+                "fallback_events": 0,
+            },
+        ]
+    )
+
+    assert summary["view_count"] == 2
+    assert summary["backend_counts"]["occt-elevation-edges"] == 1
+    assert summary["occt_view_count"] == 1
+    assert summary["occt_coverage_view_count"] == 1
+
+
+def test_summarize_geometry_runtime_aggregates_owned_geometry_telemetry():
+    summary = summarize_geometry_runtime(
+        [
+            {
+                "view_id": "floor_plan_01",
+                "backend": "composite-occt+serializer",
+                "linework_counts": {"CUT": 1},
+                "owned_geometry_telemetry": {
+                    "projection": {
+                        "attempted_elements": 3,
+                        "emitted_lines": 2,
+                        "skipped_elements": 1,
+                        "failed_elements": 0,
+                        "attempted_by_class": {"IfcWall": 3},
+                        "emitted_by_class": {"IfcWall": 2},
+                        "skipped_by_class": {"IfcWall": 1},
+                        "failed_by_class": {},
+                    },
+                    "hidden": {
+                        "attempted_elements": 3,
+                        "emitted_lines": 1,
+                        "skipped_elements": 1,
+                        "failed_elements": 1,
+                        "attempted_by_class": {"IfcWall": 3},
+                        "emitted_by_class": {"IfcWall": 1},
+                        "skipped_by_class": {"IfcWall": 1},
+                        "failed_by_class": {"IfcWall": 1},
+                    },
+                },
+            }
+        ]
+    )
+
+    assert summary["owned_geometry"]["projection"]["attempted_elements"] == 3
+    assert summary["owned_geometry"]["projection"]["emitted_by_class"] == {"IfcWall": 2}
+    assert summary["owned_geometry"]["hidden"]["failed_elements"] == 1
+    assert summary["owned_geometry"]["hidden"]["failed_by_class"] == {"IfcWall": 1}

@@ -495,7 +495,7 @@ def _feature_annotations(
     for primitive in door_markers:
         anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
         ux, uy = _feature_direction_screen(transform, primitive)
-        door_swing_sign = _door_swing_sign_from_label(primitive.label)
+        door_swing_sign = _door_swing_sign_from_semantics(primitive)
         sx, sy, bbox, moved = _resolve_symbol_placement(
             symbol_kind="door",
             anchor_sx=anchor_sx,
@@ -627,7 +627,19 @@ def _feature_annotation_counts(geometry: GeometrySummary) -> Dict[str, int]:
 
 
 class _FeaturePrimitive:
-    __slots__ = ("anchor", "dir_x", "dir_y", "length", "ifc_class", "label")
+    __slots__ = (
+        "anchor",
+        "dir_x",
+        "dir_y",
+        "length",
+        "ifc_class",
+        "label",
+        "display_label",
+        "door_handedness",
+        "semantic_source",
+        "semantic_confidence",
+        "host_element",
+    )
 
     def __init__(
         self,
@@ -637,6 +649,11 @@ class _FeaturePrimitive:
         length: float,
         ifc_class: str,
         label: str | None = None,
+        display_label: str | None = None,
+        door_handedness: str | None = None,
+        semantic_source: str | None = None,
+        semantic_confidence: float | None = None,
+        host_element: str | None = None,
     ):
         self.anchor = anchor
         self.dir_x = dir_x
@@ -644,6 +661,11 @@ class _FeaturePrimitive:
         self.length = length
         self.ifc_class = ifc_class
         self.label = label
+        self.display_label = display_label
+        self.door_handedness = door_handedness
+        self.semantic_source = semantic_source
+        self.semantic_confidence = semantic_confidence
+        self.host_element = host_element
 
 
 def _collect_feature_primitives(
@@ -668,6 +690,11 @@ def _collect_feature_primitives(
             length=semantic_priority_length,
             ifc_class=class_name,
             label=anchor.label,
+            display_label=anchor.display_label,
+            door_handedness=anchor.door_handedness,
+            semantic_source=anchor.semantic_source,
+            semantic_confidence=anchor.semantic_confidence,
+            host_element=anchor.host_element,
         )
         existing = grouped[class_name].get(bucket)
         if existing is None or primitive.length > existing.length:
@@ -820,6 +847,11 @@ def _align_doors_to_host(
                 length=primitive.length,
                 ifc_class=primitive.ifc_class,
                 label=primitive.label,
+                display_label=primitive.display_label,
+                door_handedness=primitive.door_handedness,
+                semantic_source=primitive.semantic_source,
+                semantic_confidence=primitive.semantic_confidence,
+                host_element=primitive.host_element,
             )
         )
     return aligned
@@ -864,7 +896,7 @@ def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -
         if mode == "fixed":
             label = fixed_label
         elif mode == "ifc_name":
-            label = (primitive.label or "").strip() or f"{(prefix or 'R')}-{number:03d}"
+            label = (primitive.display_label or primitive.label or "").strip() or f"{(prefix or 'R')}-{number:03d}"
         elif mode == "numeric":
             label = f"{number:03d}" if not prefix else f"{prefix}-{number:03d}"
         else:
@@ -879,6 +911,11 @@ def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -
                 length=primitive.length,
                 ifc_class=primitive.ifc_class,
                 label=label,
+                display_label=primitive.display_label,
+                door_handedness=primitive.door_handedness,
+                semantic_source=primitive.semantic_source,
+                semantic_confidence=primitive.semantic_confidence,
+                host_element=primitive.host_element,
             )
         )
     return labeled
@@ -1092,7 +1129,14 @@ def _door_anchor_points(
     return points
 
 
-def _door_swing_sign_from_label(label: str | None) -> float:
+def _door_swing_sign_from_semantics(primitive: _FeaturePrimitive) -> float:
+    handedness = (primitive.door_handedness or "").strip().lower()
+    if handedness == "left":
+        return -1.0
+    if handedness == "right":
+        return 1.0
+
+    label = primitive.label
     if not label:
         return 1.0
     hint = label.strip().lower()

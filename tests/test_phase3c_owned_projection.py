@@ -372,6 +372,53 @@ def test_extract_owned_projection_deduplicates_reversed_duplicates(monkeypatch) 
     assert lines[0].source_ifc_class == "IfcWall"
 
 
+def test_extract_owned_projection_report_tracks_skips_and_failures(monkeypatch) -> None:
+    profile = load_style_profile(None)
+    profile = replace(profile, floor_plan=replace(profile.floor_plan, own_projection=True))
+    view = _view()
+
+    monkeypatch.setattr(geometry_projection.occt_section, "OCCT_AVAILABLE", True)
+    monkeypatch.setattr(geometry_projection.occt_section, "run_with_budget", lambda fn, _: fn())
+
+    def _fake_project(
+        ifc_geom_module,  # noqa: ARG001
+        element,
+        chord_tol_m,  # noqa: ARG001
+        cut_plane_z,  # noqa: ARG001
+        view_band_low_z,  # noqa: ARG001
+        view_band_high_z,  # noqa: ARG001
+    ):
+        if element.GlobalId == "FAIL":
+            raise RuntimeError("boom")
+        if element.GlobalId == "EMPTY":
+            return []
+        return [[(0.0, 0.0), (1.0, 0.0)]]
+
+    monkeypatch.setattr(geometry_projection, "_project_edges_of_element", _fake_project)
+
+    report = geometry_projection.extract_owned_projection_report(
+        view=view,
+        profile=profile,
+        elements=[
+            _FakeElement("OK", ifc_class="IfcWall", numeric_id=1),
+            _FakeElement("EMPTY", ifc_class="IfcDoor", numeric_id=2),
+            _FakeElement("FAIL", ifc_class="IfcDoor", numeric_id=3),
+        ],
+        ifc_geom_module="geom",
+        storey_elevation_m=0.0,
+    )
+
+    assert len(report.lines) == 1
+    assert report.telemetry.attempted_elements == 3
+    assert report.telemetry.emitted_lines == 1
+    assert report.telemetry.skipped_elements == 1
+    assert report.telemetry.failed_elements == 1
+    assert report.telemetry.attempted_by_class == {"IfcDoor": 2, "IfcWall": 1}
+    assert report.telemetry.emitted_by_class == {"IfcWall": 1}
+    assert report.telemetry.skipped_by_class == {"IfcDoor": 1}
+    assert report.telemetry.failed_by_class == {"IfcDoor": 1}
+
+
 def test_extract_owned_hidden_deduplicates_reversed_duplicates(monkeypatch) -> None:
     profile = load_style_profile(None)
     profile = replace(profile, floor_plan=replace(profile.floor_plan, own_hidden=True))

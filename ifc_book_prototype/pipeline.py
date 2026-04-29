@@ -21,6 +21,8 @@ from .domain import (
     VIEW_KIND_ELEVATION_SOUTH,
     VIEW_KIND_ELEVATION_WEST,
     VIEW_KIND_PLAN,
+    typed_line_sort_key,
+    typed_region_sort_key,
     to_primitive,
 )
 from .elevation_backend import ElevationBackend, is_elevation_view
@@ -57,6 +59,19 @@ def _slugify(value: str) -> str:
         elif chars and chars[-1] != "_":
             chars.append("_")
     return "".join(chars).strip("_") or "sheet"
+
+
+STAGE_ARTIFACTS = {
+    "preflight": "metadata/preflight.json",
+    "normalized_model": "metadata/normalized_model.json",
+    "view_manifest": "metadata/view_manifest.json",
+    "view_geometry": "metadata/view_geometry.json",
+    "view_linework": "metadata/view_linework.json",
+    "geometry_runtime_summary": "metadata/geometry_runtime_summary.json",
+    "schedule_manifest": "metadata/schedule_manifest.json",
+}
+
+CACHE_SCHEMA_VERSION = 1
 
 
 class PrototypePipeline:
@@ -96,6 +111,8 @@ class PrototypePipeline:
         self._write_json(metadata_dir / "normalized_model.json", normalized)
         self._write_json(metadata_dir / "view_manifest.json", views)
         self._write_json(metadata_dir / "view_geometry.json", geometry)
+        linework_artifact = _build_view_linework_artifact(geometry)
+        self._write_json(metadata_dir / "view_linework.json", linework_artifact)
         self._write_json(metadata_dir / "geometry_runtime_summary.json", summarize_geometry_runtime(geometry))
         self._write_json(metadata_dir / "schedule_manifest.json", schedules)
         self._write_json(output_dir / "manifest.json", manifest)
@@ -295,6 +312,7 @@ class PrototypePipeline:
 
         warnings = list(model.warnings)
         warnings.extend(preflight.warnings)
+        linework_artifact = _build_view_linework_artifact(geometry)
         return PipelineManifest(
             job_id=job_id,
             input_sha256=preflight.input_sha256,
@@ -304,6 +322,13 @@ class PrototypePipeline:
             pdf_path=str(pdf_path.resolve()),
             sheets=sheet_artifacts,
             warnings=warnings,
+            stage_artifacts=dict(STAGE_ARTIFACTS),
+            cache=_build_cache_manifest(
+                input_sha256=preflight.input_sha256,
+                style_profile_id=self.profile.profile_id,
+                model_hash=model.model_hash,
+                linework_artifact=linework_artifact,
+            ),
         )
 
     @staticmethod
@@ -312,3 +337,82 @@ class PrototypePipeline:
             json.dumps(to_primitive(payload), indent=2, sort_keys=True, ensure_ascii=True) + "\n",
             encoding="utf-8",
         )
+
+
+def _build_cache_manifest(
+    *,
+    input_sha256: str,
+    style_profile_id: str,
+    model_hash: str,
+    linework_artifact: dict,
+) -> dict:
+    summary = dict(linework_artifact.get("summary", {}))
+    return {
+        "schema_version": CACHE_SCHEMA_VERSION,
+        "keys": {
+            "input_sha256": input_sha256,
+            "style_profile_id": style_profile_id,
+            "model_hash": model_hash,
+        },
+        "readiness": {
+            "stage_replay": True,
+            "typed_linework": {
+                "artifact": STAGE_ARTIFACTS["view_linework"],
+                "schema_version": linework_artifact.get("schema_version", 1),
+                "view_count": int(summary.get("view_count", 0)),
+                "typed_view_count": int(summary.get("typed_view_count", 0)),
+                "line_count": int(summary.get("line_count", 0)),
+                "region_count": int(summary.get("region_count", 0)),
+            },
+        },
+    }
+
+
+def _build_view_linework_artifact(geometry: List[GeometrySummary]) -> dict:
+    views = []
+    typed_view_count = 0
+    line_count = 0
+    region_count = 0
+    for item in geometry:
+        linework = item.linework
+        lines = []
+        regions = []
+        quantization_m = None
+        counts_by_kind = dict(item.linework_counts)
+        if linework is not None:
+            typed_view_count += 1
+            quantization_m = linework.quantization_m
+            counts_by_kind = dict(linework.counts_by_kind or item.linework_counts)
+            lines = [
+                to_primitive(line)
+                for line in sorted(linework.lines, key=typed_line_sort_key)
+            ]
+            regions = [
+                to_primitive(region)
+                for region in sorted(linework.regions, key=typed_region_sort_key)
+            ]
+        line_count += len(lines)
+        region_count += len(regions)
+        views.append(
+            {
+                "view_id": item.view_id,
+                "backend": item.backend,
+                "bounds": to_primitive(item.bounds),
+                "linework_counts": dict(sorted(counts_by_kind.items())),
+                "linework": {
+                    "quantization_m": quantization_m,
+                    "lines": lines,
+                    "regions": regions,
+                },
+            }
+        )
+    return {
+        "schema_version": 1,
+        "views": views,
+        "summary": {
+            "view_count": len(views),
+            "typed_view_count": typed_view_count,
+            "line_count": line_count,
+            "region_count": region_count,
+        },
+    }

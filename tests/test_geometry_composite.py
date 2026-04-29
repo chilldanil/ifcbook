@@ -139,13 +139,29 @@ def test_composite_backend_uses_owned_projection_when_toggle_enabled(monkeypatch
 
     monkeypatch.setattr(
         geometry_projection,
-        "extract_owned_projection_lines",
-        lambda **_: list(owned_projected),
+        "extract_owned_projection_report",
+        lambda **_: geometry_projection.OwnedLineExtractionReport(
+            lines=list(owned_projected),
+            telemetry=geometry_projection.OwnedLineTelemetry(
+                attempted_elements=2,
+                emitted_lines=2,
+                attempted_by_class={"IfcColumn": 1, "IfcWall": 1},
+                emitted_by_class={"IfcColumn": 1, "IfcWall": 1},
+            ),
+        ),
     )
     monkeypatch.setattr(
         geometry_projection,
-        "extract_owned_hidden_lines",
-        lambda **_: list(owned_hidden),
+        "extract_owned_hidden_report",
+        lambda **_: geometry_projection.OwnedLineExtractionReport(
+            lines=list(owned_hidden),
+            telemetry=geometry_projection.OwnedLineTelemetry(
+                attempted_elements=1,
+                emitted_lines=1,
+                attempted_by_class={"IfcSlab": 1},
+                emitted_by_class={"IfcSlab": 1},
+            ),
+        ),
     )
 
     def _spy_merge(base_lines, owned_projection, owned_hidden, *, suppress_serializer_projection):
@@ -167,6 +183,7 @@ def test_composite_backend_uses_owned_projection_when_toggle_enabled(monkeypatch
     assert summary.projection_candidates == {"IfcColumn": 1, "IfcWall": 1}
     assert "Projection source: owned (serializer projection suppressed)." in summary.notes
     assert "Owned projection output: 2 projected line(s), 1 hidden line(s)." in summary.notes
+    assert any(note.startswith("Owned projection telemetry: attempted=2") for note in summary.notes)
     assert summary.linework_counts == {"CUT": 1, "HIDDEN": 1, "PROJECTED": 2}
     assert summary.linework is not None
     projected_classes = sorted(
@@ -188,13 +205,19 @@ def test_composite_backend_keeps_serializer_projection_when_owned_disabled(monke
 
     monkeypatch.setattr(
         geometry_projection,
-        "extract_owned_projection_lines",
-        lambda **_: [],
+        "extract_owned_projection_report",
+        lambda **_: geometry_projection.OwnedLineExtractionReport(
+            lines=[],
+            telemetry=geometry_projection.OwnedLineTelemetry(),
+        ),
     )
     monkeypatch.setattr(
         geometry_projection,
-        "extract_owned_hidden_lines",
-        lambda **_: [],
+        "extract_owned_hidden_report",
+        lambda **_: geometry_projection.OwnedLineExtractionReport(
+            lines=[],
+            telemetry=geometry_projection.OwnedLineTelemetry(),
+        ),
     )
 
     def _spy_merge(base_lines, owned_projection, owned_hidden, *, suppress_serializer_projection):

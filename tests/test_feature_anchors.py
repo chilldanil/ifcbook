@@ -7,6 +7,7 @@ import pytest
 
 from ifc_book_prototype.feature_anchors import (
     _extract_direction_xy_for_feature,
+    _extract_feature_semantics,
     _extract_label,
     build_feature_anchors_by_storey,
     count_feature_anchors,
@@ -126,6 +127,23 @@ def test_extract_door_semantic_swing_hint_from_property_set():
     assert _extract_label(door, "IfcDoor") == "door_swing:right"
 
 
+def test_extract_door_semantics_are_structured_and_back_compat():
+    class _Door:
+        OperationType = "SINGLE_SWING_LEFT"
+        UserDefinedOperationType = None
+        PredefinedType = None
+        ObjectType = None
+        Name = None
+        IsDefinedBy = []
+
+    semantics = _extract_feature_semantics(_Door(), "IfcDoor")
+    assert semantics["door_handedness"] == "left"
+    assert semantics["operation_type"] == "SINGLE_SWING_LEFT"
+    assert semantics["semantic_source"] == "OperationType"
+    assert semantics["semantic_confidence"] == 0.75
+    assert semantics["label"] == "door_swing:left"
+
+
 def test_extract_space_label_combines_number_and_name_from_ifc_fields():
     class _Space:
         Number = "101"
@@ -180,6 +198,23 @@ def test_extract_space_label_uses_property_set_when_attributes_missing():
             ]
 
     assert _extract_label(_Space(), "IfcSpace") == "A-12 Lobby"
+
+
+def test_extract_space_semantics_expose_display_label():
+    class _Space:
+        Number = "101"
+        Name = "Kitchen"
+        LongName = None
+        Reference = None
+        Tag = None
+        ObjectType = None
+        IsDefinedBy = []
+
+    semantics = _extract_feature_semantics(_Space(), "IfcSpace")
+    assert semantics["display_label"] == "101 Kitchen"
+    assert semantics["semantic_source"] == "ifc_space_label"
+    assert semantics["semantic_confidence"] == 0.85
+    assert semantics["label"] == "101 Kitchen"
 
 
 class _MockEntity:

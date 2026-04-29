@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -208,6 +208,14 @@ class FeatureAnchor2D:
     dir_x: float = 1.0
     dir_y: float = 0.0
     source_element: Optional[str] = None
+    display_label: Optional[str] = None
+    door_handedness: Optional[str] = None
+    operation_type: Optional[str] = None
+    semantic_source: Optional[str] = None
+    semantic_confidence: Optional[float] = None
+    host_element: Optional[str] = None
+    # Back-compat field for existing serialized bundles and tests. New code
+    # should prefer the structured semantic fields above.
     label: Optional[str] = None
 
 
@@ -252,6 +260,7 @@ class GeometrySummary:
     notes: List[str] = field(default_factory=list)
     linework: Optional[ViewLinework] = field(default=None, metadata={"serialize": False})
     linework_counts: Dict[str, int] = field(default_factory=dict)
+    owned_geometry_telemetry: Dict[str, Any] = field(default_factory=dict)
     feature_anchors: List[FeatureAnchor2D] = field(default_factory=list)
     feature_anchor_counts: Dict[str, int] = field(default_factory=dict)
     fallback_events: int = 0
@@ -299,6 +308,8 @@ class PipelineManifest:
     pdf_path: str
     sheets: List[SheetArtifact]
     warnings: List[str] = field(default_factory=list)
+    stage_artifacts: Dict[str, str] = field(default_factory=dict)
+    cache: Dict[str, Any] = field(default_factory=dict)
 
 
 def to_primitive(value):

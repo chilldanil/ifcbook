@@ -129,7 +129,10 @@ def evaluate_runtime_gate(
 ) -> RuntimeGateResult:
     thresholds.validate()
     view_count = _as_int(summary_data.get("view_count", 0), "view_count")
-    occt_view_count = _as_int(summary_data.get("occt_view_count", 0), "occt_view_count")
+    occt_view_count = _as_int(
+        summary_data.get("occt_coverage_view_count", summary_data.get("occt_view_count", 0)),
+        "occt_coverage_view_count",
+    )
     fallback = summary_data.get("fallback", {})
     if not isinstance(fallback, Mapping):
         raise ValueError("Field 'fallback' must be an object.")

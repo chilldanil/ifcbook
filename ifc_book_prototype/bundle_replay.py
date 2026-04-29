@@ -8,7 +8,9 @@ from typing import List
 
 from .domain import FeatureOverlayRule, PipelineManifest, SheetArtifact, StyleProfile, to_primitive
 from .geometry_metrics import summarize_geometry_runtime
+from .pipeline import STAGE_ARTIFACTS, _build_cache_manifest
 from .render_pdf import write_pdf_from_svg_sheets
+from .render_svg import _door_symbol, _room_tag_symbol, _stair_symbol
 
 
 METADATA_FILENAMES = (
@@ -16,6 +18,7 @@ METADATA_FILENAMES = (
     "normalized_model.json",
     "view_manifest.json",
     "view_geometry.json",
+    "view_linework.json",
     "geometry_runtime_summary.json",
     "schedule_manifest.json",
 )
@@ -104,6 +107,14 @@ def replay_bundle(bundle_dir: Path, output_dir: Path, profile: StyleProfile | No
         if source_file.exists():
             shutil.copy2(source_file, metadata_dir / filename)
 
+    linework_artifact = _load_optional_json(metadata_dir / "view_linework.json")
+    if linework_artifact is None:
+        linework_artifact = _empty_linework_artifact()
+        (metadata_dir / "view_linework.json").write_text(
+            json.dumps(linework_artifact, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+
     bundle_summary = _build_bundle_summary(bundle_dir, source_manifest, copied_sheets)
     runtime_summary = bundle_summary.get("geometry_runtime_summary")
     if runtime_summary is not None:
@@ -125,6 +136,13 @@ def replay_bundle(bundle_dir: Path, output_dir: Path, profile: StyleProfile | No
         pdf_path=copied_pdf_path,
         sheets=copied_sheets,
         warnings=warnings,
+        stage_artifacts=dict(STAGE_ARTIFACTS),
+        cache=_build_cache_manifest(
+            input_sha256=source_manifest["input_sha256"],
+            style_profile_id=source_manifest["style_profile_id"],
+            model_hash=source_manifest["model_hash"],
+            linework_artifact=linework_artifact or _empty_linework_artifact(),
+        ),
     )
     (output_dir / "manifest.json").write_text(
         json.dumps(to_primitive(manifest), indent=2, sort_keys=True, ensure_ascii=True) + "\n",
@@ -155,6 +173,7 @@ def _build_bundle_summary(bundle_dir: Path, source_manifest: dict, copied_sheets
     view_manifest = _load_optional_json(bundle_dir / "metadata" / "view_manifest.json") or []
     schedule_manifest = _load_optional_json(bundle_dir / "metadata" / "schedule_manifest.json") or []
     geometry_runtime_summary = _load_optional_json(bundle_dir / "metadata" / "geometry_runtime_summary.json")
+    view_linework = _load_optional_json(bundle_dir / "metadata" / "view_linework.json")
     if geometry_runtime_summary is None:
         view_geometry = _load_optional_json(bundle_dir / "metadata" / "view_geometry.json") or []
         geometry_runtime_summary = summarize_geometry_runtime(view_geometry)
@@ -174,12 +193,26 @@ def _build_bundle_summary(bundle_dir: Path, source_manifest: dict, copied_sheets
         "storey_count": len((normalized or {}).get("storeys", [])),
         "view_titles": [view.get("title", "") for view in view_manifest],
         "geometry_runtime_summary": geometry_runtime_summary,
+        "linework_summary": (view_linework or {}).get("summary", {}),
         "capability_counts": capability_counts,
         "capabilities": {
             "has_spaces": capability_counts["IFCSPACE"] > 0,
             "has_openings": capability_counts["IFCDOOR"] > 0 or capability_counts["IFCWINDOW"] > 0,
             "has_circulation": capability_counts["IFCSTAIR"] > 0 or capability_counts["IFCRAMP"] > 0,
             "has_structural_types": any(capability_counts[name] > 0 for name in ("IFCCOLUMN", "IFCBEAM", "IFCMEMBER", "IFCSLAB")),
+        },
+    }
+
+
+def _empty_linework_artifact() -> dict:
+    return {
+        "schema_version": 1,
+        "views": [],
+        "summary": {
+            "view_count": 0,
+            "typed_view_count": 0,
+            "line_count": 0,
+            "region_count": 0,
         },
     }
 
@@ -324,6 +357,8 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
             continue
         source = str(item.get("source_element", ""))
         label = str(item.get("label", "") or "")
+        display_label = str(item.get("display_label", "") or "")
+        door_handedness = str(item.get("door_handedness", "") or "")
         buckets[class_name].append(
             {
                 "x": x,
@@ -332,6 +367,8 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
                 "dir_y": float(item.get("dir_y", 0.0) or 0.0),
                 "source_element": source,
                 "label": label,
+                "display_label": display_label,
+                "door_handedness": door_handedness,
             }
         )
     for key in buckets:
@@ -343,19 +380,29 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
             sx, sy = transform(item["x"], item["y"])
             ux, uy = _normalize_2d(item["dir_x"], item["dir_y"])
             label = overlay_style.door_label.strip() or "D"
-            lines.extend(_replay_door_symbol(sx, sy, ux, uy, overlay_style.door_color, label))
+            lines.extend(
+                _door_symbol(
+                    sx,
+                    sy,
+                    ux,
+                    uy,
+                    swing_sign=_door_swing_sign_from_anchor(item),
+                    color=overlay_style.door_color,
+                    label_text=label,
+                )
+            )
     if overlay_style.stairs_enabled:
         for item in buckets["IfcStair"][: max(0, int(overlay_style.max_stair_arrows))]:
             sx, sy = transform(item["x"], item["y"])
             ux, uy = _normalize_2d(item["dir_x"], item["dir_y"])
             label = overlay_style.stair_label.strip() or "UP"
-            lines.extend(_replay_stair_symbol(sx, sy, ux, uy, overlay_style.stair_color, label))
+            lines.extend(_stair_symbol(sx, sy, ux, uy, overlay_style.stair_color, label))
     if overlay_style.rooms_enabled:
         for item in buckets["IfcSpace"][: max(0, int(overlay_style.max_room_tags))]:
             sx, sy = transform(item["x"], item["y"])
-            label = item["label"] or _room_preview_label(overlay_style)
+            label = item["display_label"] or item["label"] or _room_preview_label(overlay_style)
             lines.extend(
-                _replay_room_symbol(
+                _room_tag_symbol(
                     sx,
                     sy,
                     label,
@@ -403,42 +450,13 @@ def _normalize_2d(x: float, y: float):
     return x / length, y / length
 
 
-def _replay_door_symbol(sx: float, sy: float, ux: float, uy: float, color: str, label: str) -> List[str]:
-    leaf = 2.6
-    ex = sx + ux * leaf
-    ey = sy + uy * leaf
-    return [
-        f'  <circle cx="{round(sx, 3)}" cy="{round(sy, 3)}" r="0.75" fill="#ffffff" stroke="{color}" stroke-width="0.18"/>',
-        f'  <line x1="{round(sx, 3)}" y1="{round(sy, 3)}" x2="{round(ex, 3)}" y2="{round(ey, 3)}" stroke="{color}" stroke-width="0.18"/>',
-        f'  <text x="{round(sx - 0.5, 3)}" y="{round(sy + 0.8, 3)}" font-size="1.8" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="{color}">{label}</text>',
-    ]
-
-
-def _replay_stair_symbol(sx: float, sy: float, ux: float, uy: float, color: str, label: str) -> List[str]:
-    half = 2.4
-    start_x = sx - ux * half
-    start_y = sy - uy * half
-    end_x = sx + ux * half
-    end_y = sy + uy * half
-    return [
-        f'  <line x1="{round(start_x, 3)}" y1="{round(start_y, 3)}" x2="{round(end_x, 3)}" y2="{round(end_y, 3)}" stroke="{color}" stroke-width="0.2"/>',
-        f'  <text x="{round(end_x + 0.8, 3)}" y="{round(end_y + 0.6, 3)}" font-size="1.8" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="{color}">{label}</text>',
-    ]
-
-
-def _replay_room_symbol(
-    sx: float,
-    sy: float,
-    label: str,
-    fill_color: str,
-    stroke_color: str,
-    text_color: str,
-) -> List[str]:
-    half_w = max(2.4, 0.9 + len(label) * 0.45)
-    half_h = 1.5
-    x = sx - half_w
-    y = sy - half_h
-    return [
-        f'  <rect x="{round(x, 3)}" y="{round(y, 3)}" width="{round(half_w * 2.0, 3)}" height="{round(half_h * 2.0, 3)}" fill="{fill_color}" stroke="{stroke_color}" stroke-width="0.16" rx="0.45" ry="0.45"/>',
-        f'  <text x="{round(sx - (len(label) * 0.45) / 2.0, 3)}" y="{round(sy + 0.55, 3)}" font-size="1.6" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="{text_color}">{label[:18]}</text>',
-    ]
+def _door_swing_sign_from_anchor(item: dict) -> float:
+    handedness = str(item.get("door_handedness", "") or "").strip().lower()
+    if handedness == "left":
+        return -1.0
+    if handedness == "right":
+        return 1.0
+    label = str(item.get("label", "") or "").strip().lower()
+    if label.startswith("door_swing:"):
+        label = label.split(":", 1)[1].strip()
+    return -1.0 if label == "left" else 1.0

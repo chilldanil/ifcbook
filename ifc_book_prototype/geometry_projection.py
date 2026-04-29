@@ -43,6 +43,7 @@ byte-identical across reruns.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Iterable, List, Sequence, Tuple
 
 from . import occt_section
@@ -59,10 +60,44 @@ from .domain import (
 
 __all__ = [
     "extract_owned_projection_lines",
+    "extract_owned_projection_report",
     "extract_owned_hidden_lines",
+    "extract_owned_hidden_report",
+    "OwnedLineExtractionReport",
+    "OwnedLineTelemetry",
     "owned_projection_enabled",
     "owned_hidden_enabled",
 ]
+
+
+@dataclass(frozen=True)
+class OwnedLineTelemetry:
+    attempted_elements: int = 0
+    emitted_lines: int = 0
+    skipped_elements: int = 0
+    failed_elements: int = 0
+    attempted_by_class: dict[str, int] = field(default_factory=dict)
+    emitted_by_class: dict[str, int] = field(default_factory=dict)
+    skipped_by_class: dict[str, int] = field(default_factory=dict)
+    failed_by_class: dict[str, int] = field(default_factory=dict)
+
+    def as_dict(self) -> dict:
+        return {
+            "attempted_elements": self.attempted_elements,
+            "emitted_lines": self.emitted_lines,
+            "skipped_elements": self.skipped_elements,
+            "failed_elements": self.failed_elements,
+            "attempted_by_class": dict(sorted(self.attempted_by_class.items())),
+            "emitted_by_class": dict(sorted(self.emitted_by_class.items())),
+            "skipped_by_class": dict(sorted(self.skipped_by_class.items())),
+            "failed_by_class": dict(sorted(self.failed_by_class.items())),
+        }
+
+
+@dataclass(frozen=True)
+class OwnedLineExtractionReport:
+    lines: List[TypedLine2D]
+    telemetry: OwnedLineTelemetry
 
 
 def owned_projection_enabled(profile: StyleProfile) -> bool:
@@ -91,10 +126,28 @@ def extract_owned_projection_lines(
     Step 1 implementation (see module docstring): project every BRep edge
     to XY, drop cut-plane-coplanar edges, chain, quantize, sort.
     """
+    return extract_owned_projection_report(
+        view=view,
+        profile=profile,
+        elements=elements,
+        ifc_geom_module=ifc_geom_module,
+        storey_elevation_m=storey_elevation_m,
+    ).lines
+
+
+def extract_owned_projection_report(
+    *,
+    view: PlannedView,
+    profile: StyleProfile,
+    elements: Iterable[object],
+    ifc_geom_module: object,
+    storey_elevation_m: float,
+) -> OwnedLineExtractionReport:
+    """Return owned PROJECTED lines plus extraction telemetry."""
     if not owned_projection_enabled(profile):
-        return []
+        return OwnedLineExtractionReport(lines=[], telemetry=OwnedLineTelemetry())
     if not occt_section.OCCT_AVAILABLE:
-        return []
+        return OwnedLineExtractionReport(lines=[], telemetry=OwnedLineTelemetry())
 
     cut_plane_z = storey_elevation_m + view.cut_plane_m
     view_band_low_z = storey_elevation_m - view.view_depth_below_m
@@ -108,9 +161,14 @@ def extract_owned_projection_lines(
     )
 
     results: List[TypedLine2D] = []
+    attempted_by_class: dict[str, int] = {}
+    emitted_by_class: dict[str, int] = {}
+    skipped_by_class: dict[str, int] = {}
+    failed_by_class: dict[str, int] = {}
     for element in sorted_elements:
-        ifc_class = element.is_a()
+        ifc_class = _element_ifc_class(element)
         global_id = getattr(element, "GlobalId", "") or ""
+        _increment(attempted_by_class, ifc_class)
         try:
             polylines = occt_section.run_with_budget(
                 lambda el=element: _project_edges_of_element(
@@ -127,10 +185,13 @@ def extract_owned_projection_lines(
             # Owned projection is best-effort for now; a per-element failure
             # must not break the view. The cut extractor already records
             # fallback events; for PROJECTED we simply skip.
+            _increment(failed_by_class, ifc_class)
             continue
+        emitted_for_element = 0
         for polyline in polylines:
             if len(polyline) < 2:
                 continue
+            emitted_for_element += 1
             results.append(
                 TypedLine2D(
                     kind=LineKind.PROJECTED,
@@ -141,8 +202,24 @@ def extract_owned_projection_lines(
                     source_ifc_class=ifc_class,
                 )
             )
+        if emitted_for_element:
+            emitted_by_class[ifc_class] = emitted_by_class.get(ifc_class, 0) + emitted_for_element
+        else:
+            _increment(skipped_by_class, ifc_class)
 
-    return _deduplicate_typed_lines(sorted(results, key=typed_line_sort_key))
+    lines = _deduplicate_typed_lines(sorted(results, key=typed_line_sort_key))
+    emitted_by_class = _count_lines_by_class(lines)
+    telemetry = OwnedLineTelemetry(
+        attempted_elements=len(sorted_elements),
+        emitted_lines=len(lines),
+        skipped_elements=sum(skipped_by_class.values()),
+        failed_elements=sum(failed_by_class.values()),
+        attempted_by_class=attempted_by_class,
+        emitted_by_class=emitted_by_class,
+        skipped_by_class=skipped_by_class,
+        failed_by_class=failed_by_class,
+    )
+    return OwnedLineExtractionReport(lines=lines, telemetry=telemetry)
 
 
 def extract_owned_hidden_lines(
@@ -159,10 +236,28 @@ def extract_owned_hidden_lines(
     when OCCT/HLR bindings are unavailable or an element fails, that element
     contributes no hidden output but the run continues.
     """
+    return extract_owned_hidden_report(
+        view=view,
+        profile=profile,
+        elements=elements,
+        ifc_geom_module=ifc_geom_module,
+        storey_elevation_m=storey_elevation_m,
+    ).lines
+
+
+def extract_owned_hidden_report(
+    *,
+    view: PlannedView,
+    profile: StyleProfile,
+    elements: Iterable[object],
+    ifc_geom_module: object,
+    storey_elevation_m: float,
+) -> OwnedLineExtractionReport:
+    """Return owned HIDDEN lines plus extraction telemetry."""
     if not owned_hidden_enabled(profile):
-        return []
+        return OwnedLineExtractionReport(lines=[], telemetry=OwnedLineTelemetry())
     if not occt_section.OCCT_AVAILABLE:
-        return []
+        return OwnedLineExtractionReport(lines=[], telemetry=OwnedLineTelemetry())
 
     view_band_low_z = storey_elevation_m - view.view_depth_below_m
     view_band_high_z = storey_elevation_m + view.cut_plane_m + view.overhead_depth_above_m
@@ -174,9 +269,14 @@ def extract_owned_hidden_lines(
         key=lambda el: (el.is_a(), getattr(el, "GlobalId", "") or "", el.id()),
     )
     results: List[TypedLine2D] = []
+    attempted_by_class: dict[str, int] = {}
+    emitted_by_class: dict[str, int] = {}
+    skipped_by_class: dict[str, int] = {}
+    failed_by_class: dict[str, int] = {}
     for element in sorted_elements:
-        ifc_class = element.is_a()
+        ifc_class = _element_ifc_class(element)
         global_id = getattr(element, "GlobalId", "") or ""
+        _increment(attempted_by_class, ifc_class)
         try:
             polylines = occt_section.run_with_budget(
                 lambda el=element: _hidden_edges_of_element(
@@ -189,10 +289,13 @@ def extract_owned_hidden_lines(
                 budget_s,
             )
         except Exception:
+            _increment(failed_by_class, ifc_class)
             continue
+        emitted_for_element = 0
         for polyline in polylines:
             if len(polyline) < 2:
                 continue
+            emitted_for_element += 1
             results.append(
                 TypedLine2D(
                     kind=LineKind.HIDDEN,
@@ -203,7 +306,23 @@ def extract_owned_hidden_lines(
                     source_ifc_class=ifc_class,
                 )
             )
-    return _deduplicate_typed_lines(sorted(results, key=typed_line_sort_key))
+        if emitted_for_element:
+            emitted_by_class[ifc_class] = emitted_by_class.get(ifc_class, 0) + emitted_for_element
+        else:
+            _increment(skipped_by_class, ifc_class)
+    lines = _deduplicate_typed_lines(sorted(results, key=typed_line_sort_key))
+    emitted_by_class = _count_lines_by_class(lines)
+    telemetry = OwnedLineTelemetry(
+        attempted_elements=len(sorted_elements),
+        emitted_lines=len(lines),
+        skipped_elements=sum(skipped_by_class.values()),
+        failed_elements=sum(failed_by_class.values()),
+        attempted_by_class=attempted_by_class,
+        emitted_by_class=emitted_by_class,
+        skipped_by_class=skipped_by_class,
+        failed_by_class=failed_by_class,
+    )
+    return OwnedLineExtractionReport(lines=lines, telemetry=telemetry)
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +645,27 @@ def _deduplicate_typed_lines(lines: Sequence[TypedLine2D]) -> List[TypedLine2D]:
         seen.add(key)
         deduped.append(line)
     return deduped
+
+
+def _element_ifc_class(element: object) -> str:
+    try:
+        value = element.is_a()
+    except Exception:
+        return ""
+    return str(value or "")
+
+
+def _increment(counts: dict[str, int], key: str) -> None:
+    counts[key] = counts.get(key, 0) + 1
+
+
+def _count_lines_by_class(lines: Sequence[TypedLine2D]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for line in lines:
+        if not line.source_ifc_class:
+            continue
+        _increment(counts, line.source_ifc_class)
+    return counts
 
 
 def _typed_line_dedup_key(line: TypedLine2D):

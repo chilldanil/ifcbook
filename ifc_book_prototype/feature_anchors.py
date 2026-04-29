@@ -37,14 +37,20 @@ def build_feature_anchors_by_storey(
                 matrix=matrix,
                 unit_scale=unit_scale,
             )
-            label = _extract_label(element, class_name)
+            semantics = _extract_feature_semantics(element, class_name)
             anchor = FeatureAnchor2D(
                 ifc_class=class_name,
                 anchor=Point2D(x=round(anchor_x, 4), y=round(anchor_y, 4)),
                 dir_x=round(dir_x, 6),
                 dir_y=round(dir_y, 6),
                 source_element=getattr(element, "GlobalId", "") or "",
-                label=label,
+                display_label=semantics.get("display_label"),
+                door_handedness=semantics.get("door_handedness"),
+                operation_type=semantics.get("operation_type"),
+                semantic_source=semantics.get("semantic_source"),
+                semantic_confidence=_optional_float(semantics.get("semantic_confidence")),
+                host_element=_resolve_host_element_id(element),
+                label=semantics.get("label"),
             )
             by_storey.setdefault(storey_name, []).append(anchor)
 
@@ -371,19 +377,32 @@ def _is_ifc_class(entity, class_name: str) -> bool:
 
 
 def _extract_label(element, class_name: str) -> Optional[str]:
+    return _extract_feature_semantics(element, class_name).get("label")
+
+
+def _extract_feature_semantics(element, class_name: str) -> Dict[str, object]:
     if class_name == "IfcSpace":
-        return _extract_space_semantic_label(element)
+        label = _extract_space_semantic_label(element)
+        if label is None:
+            return {}
+        return {
+            "display_label": label,
+            "semantic_source": "ifc_space_label",
+            "semantic_confidence": 0.85,
+            "label": label,
+        }
 
     if class_name == "IfcDoor":
         candidates = [
-            getattr(element, "OperationType", None),
-            getattr(element, "UserDefinedOperationType", None),
-            getattr(element, "PredefinedType", None),
-            getattr(element, "ObjectType", None),
-            getattr(element, "Name", None),
+            ("OperationType", getattr(element, "OperationType", None)),
+            ("UserDefinedOperationType", getattr(element, "UserDefinedOperationType", None)),
+            ("PredefinedType", getattr(element, "PredefinedType", None)),
+            ("ObjectType", getattr(element, "ObjectType", None)),
+            ("Name", getattr(element, "Name", None)),
         ]
         candidates.extend(
-            _extract_semantic_property_strings(
+            (f"property:{name}", value)
+            for name, value in _extract_semantic_property_pairs(
                 element,
                 candidate_names=(
                     "OperationType",
@@ -396,13 +415,25 @@ def _extract_label(element, class_name: str) -> Optional[str]:
             )
         )
         semantic_hint = None
-        for value in candidates:
+        semantic_source = None
+        operation_type = None
+        for source, value in candidates:
+            text = _value_to_text(value)
+            if text and operation_type is None and "operation" in source.lower():
+                operation_type = text
             semantic_hint = _extract_door_swing_handedness(value)
             if semantic_hint is not None:
+                semantic_source = source
                 break
         if semantic_hint is not None:
-            return f"{_DOOR_SWING_LABEL_PREFIX}{semantic_hint}"
-    return None
+            return {
+                "door_handedness": semantic_hint,
+                "operation_type": operation_type,
+                "semantic_source": semantic_source or "door_handedness",
+                "semantic_confidence": 0.75,
+                "label": f"{_DOOR_SWING_LABEL_PREFIX}{semantic_hint}",
+            }
+    return {}
 
 
 def _extract_space_semantic_label(element) -> Optional[str]:
@@ -451,8 +482,16 @@ def _extract_semantic_property_strings(
     *,
     candidate_names: Iterable[str],
 ) -> List[str]:
+    return [value for _name, value in _extract_semantic_property_pairs(element, candidate_names=candidate_names)]
+
+
+def _extract_semantic_property_pairs(
+    element,
+    *,
+    candidate_names: Iterable[str],
+) -> List[Tuple[str, str]]:
     wanted = {_normalize_property_name(name) for name in candidate_names}
-    values: List[str] = []
+    values: List[Tuple[str, str]] = []
     for relation in _coerce_iterable(getattr(element, "IsDefinedBy", [])):
         prop_set = getattr(relation, "RelatingPropertyDefinition", None)
         if prop_set is None:
@@ -473,8 +512,28 @@ def _extract_semantic_property_strings(
             )
             text = _first_nonempty_label(property_values)
             if text:
-                values.append(text)
+                values.append((str(getattr(prop, "Name", "") or ""), text))
     return values
+
+
+def _resolve_host_element_id(element) -> Optional[str]:
+    for relation in _coerce_iterable(getattr(element, "FillsVoids", [])):
+        opening = getattr(relation, "RelatingOpeningElement", None)
+        for void_relation in _coerce_iterable(getattr(opening, "VoidsElements", [])):
+            host = getattr(void_relation, "RelatingBuildingElement", None)
+            global_id = getattr(host, "GlobalId", None)
+            if global_id:
+                return str(global_id)
+    return None
+
+
+def _optional_float(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
 
 
 def _normalize_property_name(value: object) -> str:
