@@ -217,6 +217,9 @@ class FeatureAnchor2D:
     # Back-compat field for existing serialized bundles and tests. New code
     # should prefer the structured semantic fields above.
     label: Optional[str] = None
+    # Actual element width in metres (e.g. IfcDoor.OverallWidth). None means
+    # unknown — consumers should fall back to a default symbol size.
+    width_m: Optional[float] = None
 
 
 def typed_line_sort_key(line: TypedLine2D):

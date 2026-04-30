@@ -25,6 +25,243 @@ from .domain import (
 
 PRIMARY_CUT_CLASSES = frozenset({"IfcWall", "IfcSlab"})
 
+# --- Dimension line style constants ---
+_DIM_COLOR = "#1e3a5f"
+_DIM_STROKE_W = 0.18
+_DIM_EXT_STROKE_W = 0.15
+_DIM_TICK_HALF = 1.6   # half-length of oblique (45°) tick mark
+_DIM_GAP = 5.0         # mm from drawing frame edge to dim line
+_DIM_EXT_OVERSHOOT = 1.5  # extension line protrudes this far past the dim line
+_DIM_TEXT_SIZE = 2.8
+_DIM_BG = "#faf8f2"    # label background matches page colour
+
+
+def _dim_h(
+    sx1: float,
+    sx2: float,
+    dim_y: float,
+    label: str,
+    ext_from_y: float,
+) -> List[str]:
+    """Horizontal dimension line with oblique tick marks and centred label."""
+    els: List[str] = []
+    ext_to_y = dim_y + _DIM_EXT_OVERSHOOT
+    for sx in (sx1, sx2):
+        els.append(
+            f'<line x1="{sx:.3f}" y1="{ext_from_y:.3f}" x2="{sx:.3f}" y2="{ext_to_y:.3f}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_EXT_STROKE_W}"/>'
+        )
+    els.append(
+        f'<line x1="{sx1:.3f}" y1="{dim_y:.3f}" x2="{sx2:.3f}" y2="{dim_y:.3f}" '
+        f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_STROKE_W}"/>'
+    )
+    t = _DIM_TICK_HALF
+    for sx in (sx1, sx2):
+        els.append(
+            f'<line x1="{sx - t:.3f}" y1="{dim_y + t:.3f}" x2="{sx + t:.3f}" y2="{dim_y - t:.3f}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_STROKE_W}"/>'
+        )
+    mid_x = (sx1 + sx2) / 2.0
+    char_w = _DIM_TEXT_SIZE * 0.55
+    bg_w = max(8.0, len(label) * char_w + 2.0)
+    bg_h = _DIM_TEXT_SIZE + 1.2
+    els.append(
+        f'<rect x="{mid_x - bg_w / 2:.3f}" y="{dim_y - bg_h:.3f}" '
+        f'width="{bg_w:.3f}" height="{bg_h:.3f}" fill="{_DIM_BG}"/>'
+    )
+    els.append(
+        f'<text x="{mid_x:.3f}" y="{dim_y - 0.6:.3f}" font-size="{_DIM_TEXT_SIZE}" '
+        f'font-family="Helvetica, Arial, sans-serif" font-weight="400" '
+        f'fill="{_DIM_COLOR}" text-anchor="middle">{escape(label)}</text>'
+    )
+    return els
+
+
+def _dim_v(
+    sy1: float,
+    sy2: float,
+    dim_x: float,
+    label: str,
+    ext_from_x: float,
+) -> List[str]:
+    """Vertical dimension line with oblique tick marks and rotated label."""
+    els: List[str] = []
+    ext_to_x = dim_x + _DIM_EXT_OVERSHOOT
+    for sy in (sy1, sy2):
+        els.append(
+            f'<line x1="{ext_from_x:.3f}" y1="{sy:.3f}" x2="{ext_to_x:.3f}" y2="{sy:.3f}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_EXT_STROKE_W}"/>'
+        )
+    els.append(
+        f'<line x1="{dim_x:.3f}" y1="{sy1:.3f}" x2="{dim_x:.3f}" y2="{sy2:.3f}" '
+        f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_STROKE_W}"/>'
+    )
+    t = _DIM_TICK_HALF
+    for sy in (sy1, sy2):
+        els.append(
+            f'<line x1="{dim_x - t:.3f}" y1="{sy + t:.3f}" x2="{dim_x + t:.3f}" y2="{sy - t:.3f}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="{_DIM_STROKE_W}"/>'
+        )
+    mid_y = (sy1 + sy2) / 2.0
+    char_w = _DIM_TEXT_SIZE * 0.55
+    bg_w = max(8.0, len(label) * char_w + 2.0)
+    bg_h = _DIM_TEXT_SIZE + 1.2
+    lx = dim_x + 1.2
+    els.append(
+        f'<rect x="{lx - bg_h / 2:.3f}" y="{mid_y - bg_w / 2:.3f}" '
+        f'width="{bg_h:.3f}" height="{bg_w:.3f}" fill="{_DIM_BG}" '
+        f'transform="rotate(-90 {lx:.3f} {mid_y:.3f})"/>'
+    )
+    els.append(
+        f'<text x="{lx:.3f}" y="{mid_y:.3f}" font-size="{_DIM_TEXT_SIZE}" '
+        f'font-family="Helvetica, Arial, sans-serif" font-weight="400" '
+        f'fill="{_DIM_COLOR}" text-anchor="middle" dominant-baseline="central" '
+        f'transform="rotate(-90 {lx:.3f} {mid_y:.3f})">{escape(label)}</text>'
+    )
+    return els
+
+
+def _overall_dims(
+    bounds: Bounds2D,
+    transform,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+) -> List[str]:
+    """Overall bounding-box dimension lines: width below frame, height to right."""
+    world_w = bounds.max_x - bounds.min_x
+    world_h = bounds.max_y - bounds.min_y
+    if world_w < 0.01 or world_h < 0.01:
+        return []
+
+    sx_left, _ = transform(bounds.min_x, bounds.min_y)
+    sx_right, _ = transform(bounds.max_x, bounds.min_y)
+    _, sy_top = transform(bounds.min_x, bounds.max_y)
+    _, sy_bot = transform(bounds.min_x, bounds.min_y)
+
+    frame_bottom = y + height
+    frame_right = x + width
+
+    els: List[str] = []
+    els.extend(_dim_h(sx_left, sx_right, frame_bottom + _DIM_GAP, f"{world_w:.2f} m", frame_bottom))
+    els.extend(_dim_v(sy_top, sy_bot, frame_right + _DIM_GAP, f"{world_h:.2f} m", frame_right))
+    return els
+
+
+def _elevation_storey_lines(
+    storeys: list,
+    transform,
+    bounds: Bounds2D,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+) -> List[str]:
+    """Dashed storey-level lines across the elevation with elevation labels."""
+    els: List[str] = []
+    frame_left = x
+    frame_right = x + width
+    for storey in storeys:
+        elev = storey.elevation_m
+        if elev is None:
+            continue
+        if elev < bounds.min_y - 0.1 or elev > bounds.max_y + 0.1:
+            continue
+        _, sy = transform(bounds.min_x, elev)
+        if sy < y or sy > y + height:
+            continue
+        els.append(
+            f'<line x1="{frame_left:.3f}" y1="{sy:.3f}" x2="{frame_right:.3f}" y2="{sy:.3f}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="0.15" stroke-dasharray="2 1.5"/>'
+        )
+        name_part = f"{storey.name} - " if storey.name else ""
+        label = f"{name_part}+{elev:.2f} m"
+        els.append(
+            f'<text x="{frame_left + 1.2:.3f}" y="{sy - 0.8:.3f}" font-size="2.4" '
+            f'font-family="Helvetica, Arial, sans-serif" font-weight="400" '
+            f'fill="{_DIM_COLOR}">{escape(label)}</text>'
+        )
+    return els
+
+
+def _elevation_schematic(storeys: list, x: float, y: float, width: float, height: float) -> str:
+    """Schematic elevation used when OCCT geometry is unavailable.
+
+    Draws storey level lines and height spans so the sheet is still informative
+    rather than an empty box. A small note explains that full linework requires
+    the [occt] extra.
+    """
+    elevations = sorted(
+        (s.elevation_m for s in storeys if s.elevation_m is not None),
+    )
+    els: List[str] = [
+        f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
+    ]
+
+    if not elevations:
+        els.append(_text(x + 4.0, y + 10.0, "No elevation geometry available for this view.", 4.0))
+        els.append(_text(x + 4.0, y + 17.0, "Install the [occt] extra to populate elevations.", 3.5, fill="#475569"))
+        return "\n".join(els)
+
+    elev_min = elevations[0]
+    # assume ~3 m top-storey headroom when computing total height
+    top_headroom = 3.0
+    elev_max = elevations[-1] + top_headroom
+    total_h = max(elev_max - elev_min, 1.0)
+
+    padding = 8.0
+    usable_h = height - padding * 2.0
+    scale = usable_h / total_h
+    bar_x = x + 14.0
+
+    def _ey(elev: float) -> float:
+        return round(y + height - padding - (elev - elev_min) * scale, 3)
+
+    ground_y = _ey(elev_min)
+    top_y = _ey(elev_max)
+
+    # Ground line
+    els.append(
+        f'<line x1="{x + 2:.1f}" y1="{ground_y}" x2="{x + width - 2:.1f}" y2="{ground_y}" '
+        f'stroke="{_DIM_COLOR}" stroke-width="0.35"/>'
+    )
+
+    # Storey level lines and labels
+    for storey in sorted(storeys, key=lambda s: s.elevation_m or 0.0):
+        elev = storey.elevation_m
+        if elev is None:
+            continue
+        sy = _ey(elev)
+        if sy < y or sy > y + height:
+            continue
+        els.append(
+            f'<line x1="{bar_x:.1f}" y1="{sy}" x2="{x + width - 6:.1f}" y2="{sy}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="0.18" stroke-dasharray="3 1.5"/>'
+        )
+        name_part = f"{storey.name}  " if storey.name else ""
+        els.append(
+            f'<text x="{bar_x:.1f}" y="{sy - 1.0}" font-size="3.0" '
+            f'font-family="Helvetica, Arial, sans-serif" font-weight="400" '
+            f'fill="{_DIM_COLOR}">{escape(f"{name_part}+{elev:.2f} m")}</text>'
+        )
+        # Short tick on the left margin
+        els.append(
+            f'<line x1="{x + 2:.1f}" y1="{sy}" x2="{bar_x - 1:.1f}" y2="{sy}" '
+            f'stroke="{_DIM_COLOR}" stroke-width="0.25"/>'
+        )
+
+    # Total height dimension on the right edge
+    dim_x = x + width - 4.0
+    els.extend(_dim_v(top_y, ground_y, dim_x, f"{total_h:.2f} m", dim_x - 0.5))
+
+    # Note
+    els.append(
+        _text(x + 4.0, y + height - 3.0,
+              "Schematic — install [occt] extra for full linework", 2.8, fill="#64748b")
+    )
+    return "\n".join(els)
+
 
 def render_cover_svg(model: NormalizedModel, profile: StyleProfile, job_id: str, input_sha256: str) -> str:
     lines = [
@@ -133,7 +370,7 @@ def render_view_svg(
 ) -> str:
     is_elevation = view.view_kind in ELEVATION_VIEW_KINDS
     if is_elevation:
-        return _render_elevation_svg(view, geometry, profile)
+        return _render_elevation_svg(model, view, geometry, profile)
 
     drawing = _plan_drawing(geometry, profile, x=20.0, y=38.0, width=170.0, height=150.0)
     feature_counts = _feature_annotation_counts(geometry)
@@ -165,11 +402,12 @@ def render_view_svg(
 
 
 def _render_elevation_svg(
+    model: NormalizedModel,
     view: PlannedView,
     geometry: GeometrySummary,
     profile: StyleProfile,
 ) -> str:
-    """Elevation sheet: projected linework only, no feature overlay.
+    """Elevation sheet: projected linework with storey levels and dimension lines.
 
     Uses the same typed-linework renderer as plans when a ``ViewLinework`` is
     present. When geometry is empty (e.g. OCCT unavailable), renders an
@@ -177,15 +415,17 @@ def _render_elevation_svg(
     """
     x, y, width, height = 20.0, 38.0, 170.0, 150.0
     if geometry.bounds is not None and geometry.linework is not None and geometry.linework.lines:
-        drawing = _plan_linework_typed(geometry, profile, x, y, width, height)
+        drawing = _plan_linework_typed(geometry, profile, x, y, width, height, with_features=False)
     elif geometry.bounds is not None and geometry.paths:
-        drawing = _plan_linework(geometry, profile, x, y, width, height)
+        drawing = _plan_linework(geometry, profile, x, y, width, height, with_features=False)
     else:
-        drawing = "\n".join([
-            f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
-            _text(x + 4.0, y + 10.0, "No elevation geometry available for this view.", 4.0),
-            _text(x + 4.0, y + 17.0, "Install the [occt] extra to populate elevations.", 3.5, fill="#475569"),
-        ])
+        drawing = _elevation_schematic(model.storeys, x, y, width, height)
+
+    annotation_parts = [drawing]
+    if geometry.bounds is not None:
+        transform = _build_transform(geometry.bounds, x, y, width, height)
+        annotation_parts.extend(_elevation_storey_lines(model.storeys, transform, geometry.bounds, x, y, width, height))
+        annotation_parts.extend(_overall_dims(geometry.bounds, transform, x, y, width, height))
 
     info_lines = [
         ("View", view.title),
@@ -204,7 +444,7 @@ def _render_elevation_svg(
         title=view.title,
         sheet_id=view.sheet_id,
         subtitle="Projected elevation linework (owned OCCT path)",
-        body="\n".join([drawing, detail, "\n".join(notes)]),
+        body="\n".join(annotation_parts + [detail, "\n".join(notes)]),
         profile=profile,
     )
 
@@ -256,7 +496,8 @@ def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y:
             _text(x, y - 5.0, "Plan features from IFC semantic anchors", 3.5, fill="#334155"),
             f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
         ]
-        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+        drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
         drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
         return "\n".join(drawing)
 
@@ -280,12 +521,13 @@ def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y:
         drawing.append(_polygon_path(polygon, transform, stroke="#334155", fill="none", stroke_width=0.18, dash="1.3 1.3"))
     for polygon in cut_polygons:
         drawing.append(_polygon_path(polygon, transform, stroke="#5c2d18", fill="#d6b39b", stroke_width=0.28))
-    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
+    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+    drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
 
 
-def _plan_linework(geometry: GeometrySummary, profile: StyleProfile, x: float, y: float, width: float, height: float) -> str:
+def _plan_linework(geometry: GeometrySummary, profile: StyleProfile, x: float, y: float, width: float, height: float, with_features: bool = True) -> str:
     bounds = geometry.bounds
     assert bounds is not None
     transform = _build_transform(bounds, x, y, width, height)
@@ -311,7 +553,9 @@ def _plan_linework(geometry: GeometrySummary, profile: StyleProfile, x: float, y
                 stroke_width=_lineweight_for_path(path, profile, "cut"),
             )
         )
-    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
+    if with_features:
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+    drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
 
@@ -402,6 +646,7 @@ def _plan_linework_typed(
     y: float,
     width: float,
     height: float,
+    with_features: bool = True,
 ) -> str:
     bounds = geometry.bounds
     assert bounds is not None
@@ -430,7 +675,9 @@ def _plan_linework_typed(
                 dash=dash,
             )
         )
-    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
+    if with_features:
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+    drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
 
@@ -466,6 +713,10 @@ def _lineweight_for_path(path: VectorPath, profile: StyleProfile, role: str) -> 
     return profile.lineweights_mm.get("cut_secondary", 0.25)
 
 
+_MIN_DOOR_LEAF_MM = 2.5   # minimum symbol size regardless of scale
+_DEFAULT_DOOR_WIDTH_M = 0.9
+
+
 def _feature_annotations(
     geometry: GeometrySummary,
     profile: StyleProfile,
@@ -474,6 +725,7 @@ def _feature_annotations(
     y: float,
     width: float,
     height: float,
+    draw_scale: float = 1.0,
 ) -> List[str]:
     overlay = profile.floor_plan.feature_overlay
     if not overlay.enabled:
@@ -496,6 +748,8 @@ def _feature_annotations(
         anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
         ux, uy = _feature_direction_screen(transform, primitive)
         door_swing_sign = _door_swing_sign_from_semantics(primitive)
+        door_w = primitive.width_m or _DEFAULT_DOOR_WIDTH_M
+        leaf_len = max(_MIN_DOOR_LEAF_MM, door_w * draw_scale)
         sx, sy, bbox, moved = _resolve_symbol_placement(
             symbol_kind="door",
             anchor_sx=anchor_sx,
@@ -506,6 +760,7 @@ def _feature_annotations(
             offsets=offsets,
             placed_boxes=placed_boxes,
             frame=frame,
+            leaf_len=leaf_len,
         )
         if moved and overlay.leader_enabled:
             drawing.append(
@@ -516,13 +771,11 @@ def _feature_annotations(
             )
         drawing.extend(
             _door_symbol(
-                sx,
-                sy,
-                ux,
-                uy,
+                sx, sy, ux, uy,
                 swing_sign=door_swing_sign,
                 color=overlay.door_color,
                 label_text=overlay.door_label.strip() or "D",
+                leaf_len=leaf_len,
             )
         )
         placed_boxes.append(bbox)
@@ -626,6 +879,13 @@ def _feature_annotation_counts(geometry: GeometrySummary) -> Dict[str, int]:
     }
 
 
+def _viewport_scale(bounds: Bounds2D, width: float, height: float, padding: float = 4.0) -> float:
+    """Return the drawing scale in mm/m (sheet-space mm per world-space metre)."""
+    world_w = max(bounds.max_x - bounds.min_x, 1.0e-6)
+    world_h = max(bounds.max_y - bounds.min_y, 1.0e-6)
+    return min((width - padding * 2.0) / world_w, (height - padding * 2.0) / world_h)
+
+
 class _FeaturePrimitive:
     __slots__ = (
         "anchor",
@@ -639,6 +899,7 @@ class _FeaturePrimitive:
         "semantic_source",
         "semantic_confidence",
         "host_element",
+        "width_m",
     )
 
     def __init__(
@@ -654,6 +915,7 @@ class _FeaturePrimitive:
         semantic_source: str | None = None,
         semantic_confidence: float | None = None,
         host_element: str | None = None,
+        width_m: float | None = None,
     ):
         self.anchor = anchor
         self.dir_x = dir_x
@@ -666,6 +928,7 @@ class _FeaturePrimitive:
         self.semantic_source = semantic_source
         self.semantic_confidence = semantic_confidence
         self.host_element = host_element
+        self.width_m = width_m
 
 
 def _collect_feature_primitives(
@@ -695,6 +958,7 @@ def _collect_feature_primitives(
             semantic_source=anchor.semantic_source,
             semantic_confidence=anchor.semantic_confidence,
             host_element=anchor.host_element,
+            width_m=getattr(anchor, "width_m", None),
         )
         existing = grouped[class_name].get(bucket)
         if existing is None or primitive.length > existing.length:
@@ -852,6 +1116,7 @@ def _align_doors_to_host(
                 semantic_source=primitive.semantic_source,
                 semantic_confidence=primitive.semantic_confidence,
                 host_element=primitive.host_element,
+                width_m=primitive.width_m,
             )
         )
     return aligned
@@ -951,18 +1216,19 @@ def _resolve_symbol_placement(
     frame: Tuple[float, float, float, float],
     label: str | None = None,
     door_swing_sign: float = 1.0,
+    leaf_len: float = 3.0,
 ) -> Tuple[float, float, Tuple[float, float, float, float], bool]:
     for dx, dy in offsets:
         sx = anchor_sx + dx
         sy = anchor_sy + dy
-        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label, door_swing_sign=door_swing_sign)
+        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label, door_swing_sign=door_swing_sign, leaf_len=leaf_len)
         if not _bbox_inside(bbox, frame):
             continue
         if any(_bbox_intersects(bbox, existing, padding=0.6) for existing in placed_boxes):
             continue
         moved = abs(dx) > 1.0e-9 or abs(dy) > 1.0e-9
         return sx, sy, bbox, moved
-    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label, door_swing_sign=door_swing_sign)
+    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label, door_swing_sign=door_swing_sign, leaf_len=leaf_len)
     return anchor_sx, anchor_sy, fallback_bbox, False
 
 
@@ -974,9 +1240,10 @@ def _symbol_bbox(
     uy: float,
     label: str | None = None,
     door_swing_sign: float = 1.0,
+    leaf_len: float = 3.0,
 ) -> Tuple[float, float, float, float]:
     if symbol_kind == "door":
-        points = _door_anchor_points(sx, sy, ux, uy, swing_sign=door_swing_sign)
+        points = _door_anchor_points(sx, sy, ux, uy, swing_sign=door_swing_sign, leaf_len=leaf_len)
         margin = 1.3
     elif symbol_kind == "stair":
         points = _stair_anchor_points(sx, sy, ux, uy)
@@ -1020,34 +1287,52 @@ def _door_symbol(
     swing_sign: float,
     color: str,
     label_text: str,
+    leaf_len: float = 3.0,
 ) -> List[str]:
-    drawing: List[str] = []
-    leaf_len = 3.6
-    open_angle_deg = 68.0
-    open_angle = math.radians(open_angle_deg) * (-1.0 if swing_sign < 0.0 else 1.0)
-    ex = sx + ux * leaf_len
-    ey = sy + uy * leaf_len
-    vx, vy = _rotate(ux, uy, open_angle)
-    arc_points = []
-    for idx in range(7):
-        angle = open_angle * (idx / 6.0)
-        rx, ry = _rotate(ux, uy, angle)
-        arc_points.append((sx + rx * leaf_len, sy + ry * leaf_len))
-    commands = [f"M {round(arc_points[0][0], 3)} {round(arc_points[0][1], 3)}"]
-    for point_x, point_y in arc_points[1:]:
-        commands.append(f"L {round(point_x, 3)} {round(point_y, 3)}")
+    # ux,uy = wall normal pointing INTO room (open direction).
+    # The closed leaf lies ALONG the wall: rotate normal 90° by swing_sign.
+    # Along-wall direction for the closed leaf
+    ldx = uy * swing_sign
+    ldy = -ux * swing_sign
+    # Tip of door leaf when closed (along wall)
+    closed_tip_x = sx + ldx * leaf_len
+    closed_tip_y = sy + ldy * leaf_len
 
-    drawing.append(f'<circle cx="{round(sx, 3)}" cy="{round(sy, 3)}" r="0.95" fill="#ffffff" stroke="{color}" stroke-width="0.24"/>')
-    drawing.append(
-        f'<line x1="{round(sx, 3)}" y1="{round(sy, 3)}" x2="{round(ex, 3)}" y2="{round(ey, 3)}" '
-        f'stroke="{color}" stroke-width="0.24"/>'
-    )
-    drawing.append(
-        f'<path d="{" ".join(commands)}" fill="none" stroke="{color}" stroke-width="0.22" '
-        'stroke-linecap="round" stroke-linejoin="round"/>'
-    )
-    drawing.append(_text(sx + vx * 2.0 - 0.8, sy + vy * 2.0 + 0.9, label_text, 2.3, weight="700", fill=color))
-    return drawing
+    # Quarter-circle arc from closed (along wall) to open (into room)
+    n = 13
+    arc_pts = []
+    for idx in range(n):
+        t = (math.pi / 2.0) * idx / (n - 1)
+        rt = swing_sign * t
+        cos_rt = math.cos(rt)
+        sin_rt = math.sin(rt)
+        rx = ldx * cos_rt - ldy * sin_rt
+        ry = ldx * sin_rt + ldy * cos_rt
+        arc_pts.append((sx + rx * leaf_len, sy + ry * leaf_len))
+
+    arc_cmds = [f"M {arc_pts[0][0]:.3f} {arc_pts[0][1]:.3f}"]
+    for px, py in arc_pts[1:]:
+        arc_cmds.append(f"L {px:.3f} {py:.3f}")
+
+    # Label at the 45° midpoint of the arc (inside the sweep)
+    t_mid = swing_sign * math.pi / 4.0
+    mx = ldx * math.cos(t_mid) - ldy * math.sin(t_mid)
+    my = ldx * math.sin(t_mid) + ldy * math.cos(t_mid)
+    label_x = sx + mx * (leaf_len * 0.55) - 1.0
+    label_y = sy + my * (leaf_len * 0.55) + 0.9
+
+    return [
+        # Closed leaf
+        f'<line x1="{sx:.3f}" y1="{sy:.3f}" x2="{closed_tip_x:.3f}" y2="{closed_tip_y:.3f}" '
+        f'stroke="{color}" stroke-width="0.24"/>',
+        # Swing arc
+        f'<path d="{" ".join(arc_cmds)}" fill="none" stroke="{color}" stroke-width="0.20" '
+        f'stroke-linecap="round" stroke-linejoin="round"/>',
+        # Hinge dot
+        f'<circle cx="{sx:.3f}" cy="{sy:.3f}" r="0.65" fill="{color}" stroke="none"/>',
+        # Label inside the arc
+        _text(label_x, label_y, label_text, 2.3, weight="700", fill=color),
+    ]
 
 
 def _stair_symbol(
@@ -1112,19 +1397,16 @@ def _door_anchor_points(
     ux: float,
     uy: float,
     swing_sign: float = 1.0,
+    leaf_len: float = 3.0,
 ) -> List[Tuple[float, float]]:
-    leaf_len = 3.6
-    open_angle_deg = 68.0
-    open_angle = math.radians(open_angle_deg) * (-1.0 if swing_sign < 0.0 else 1.0)
-    ex = sx + ux * leaf_len
-    ey = sy + uy * leaf_len
-    vx, vy = _rotate(ux, uy, open_angle)
-    label_x = sx + vx * 2.0 - 0.8
-    label_y = sy + vy * 2.0 + 0.9
-    points: List[Tuple[float, float]] = [(sx, sy), (ex, ey), (label_x, label_y)]
+    ldx = uy * swing_sign
+    ldy = -ux * swing_sign
+    points: List[Tuple[float, float]] = [(sx, sy), (sx + ldx * leaf_len, sy + ldy * leaf_len)]
     for idx in range(7):
-        angle = open_angle * (idx / 6.0)
-        rx, ry = _rotate(ux, uy, angle)
+        t = (math.pi / 2.0) * idx / 6.0
+        rt = swing_sign * t
+        rx = ldx * math.cos(rt) - ldy * math.sin(rt)
+        ry = ldx * math.sin(rt) + ldy * math.cos(rt)
         points.append((sx + rx * leaf_len, sy + ry * leaf_len))
     return points
 
@@ -1181,12 +1463,6 @@ def _room_tag_anchor_points(sx: float, sy: float, label: str) -> List[Tuple[floa
         (sx + half_w, sy + half_h),
         (sx - half_w, sy + half_h),
     ]
-
-
-def _rotate(x: float, y: float, radians: float) -> Tuple[float, float]:
-    cos_a = math.cos(radians)
-    sin_a = math.sin(radians)
-    return (x * cos_a - y * sin_a, x * sin_a + y * cos_a)
 
 
 def _iter_class_points(geometry: GeometrySummary):

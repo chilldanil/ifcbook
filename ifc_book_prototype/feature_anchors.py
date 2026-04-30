@@ -38,6 +38,7 @@ def build_feature_anchors_by_storey(
                 unit_scale=unit_scale,
             )
             semantics = _extract_feature_semantics(element, class_name)
+            width_m = _extract_element_width_m(element, class_name, unit_scale)
             anchor = FeatureAnchor2D(
                 ifc_class=class_name,
                 anchor=Point2D(x=round(anchor_x, 4), y=round(anchor_y, 4)),
@@ -51,6 +52,7 @@ def build_feature_anchors_by_storey(
                 semantic_confidence=_optional_float(semantics.get("semantic_confidence")),
                 host_element=_resolve_host_element_id(element),
                 label=semantics.get("label"),
+                width_m=width_m,
             )
             by_storey.setdefault(storey_name, []).append(anchor)
 
@@ -609,3 +611,39 @@ def _is_storey(entity) -> bool:
         return bool(entity.is_a("IfcBuildingStorey"))
     except Exception:
         return False
+
+
+def _extract_element_width_m(element, class_name: str, unit_scale: float) -> Optional[float]:
+    """Return OverallWidth (doors/windows) or None when unavailable."""
+    if class_name not in ("IfcDoor", "IfcWindow"):
+        return None
+    # IFC standard attributes OverallWidth / OverallHeight
+    for attr in ("OverallWidth", "Width"):
+        try:
+            value = getattr(element, attr, None)
+            if value is not None:
+                width = float(value) * unit_scale
+                if 0.1 < width < 20.0:   # sanity: between 10 cm and 20 m
+                    return round(width, 4)
+        except Exception:
+            pass
+    # Fall back to property sets (Pset_DoorCommon, Pset_WindowCommon)
+    try:
+        for definition in _coerce_iterable(getattr(element, "IsDefinedBy", [])):
+            relating = getattr(definition, "RelatingPropertyDefinition", None)
+            if relating is None:
+                continue
+            pset_name = str(getattr(relating, "Name", "") or "")
+            if "Common" not in pset_name and "Door" not in pset_name and "Window" not in pset_name:
+                continue
+            for prop in _coerce_iterable(getattr(relating, "HasProperties", [])):
+                prop_name = str(getattr(prop, "Name", "") or "").lower()
+                if prop_name in ("overallwidth", "width", "leafwidth"):
+                    nom = getattr(prop, "NominalValue", None)
+                    if nom is not None:
+                        width = float(getattr(nom, "wrappedValue", nom)) * unit_scale
+                        if 0.1 < width < 20.0:
+                            return round(width, 4)
+    except Exception:
+        pass
+    return None
