@@ -14,15 +14,29 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import benchmark as benchmark_module
-from .cli import run_pipeline_job
-from .domain import PipelineManifest
-from .runtime_gate import (
-    RuntimeGateThresholds,
-    evaluate_runtime_gate_from_run_dir,
-    format_runtime_gate_human,
-    format_runtime_gate_machine,
-)
+try:
+    from . import benchmark as benchmark_module
+    from .cli import run_pipeline_job
+    from .domain import PipelineManifest
+    from .runtime_gate import (
+        RuntimeGateThresholds,
+        evaluate_runtime_gate_from_run_dir,
+        format_runtime_gate_human,
+        format_runtime_gate_machine,
+    )
+except ImportError:
+    path_root = str(Path(__file__).parent.parent)
+    if path_root not in sys.path:
+        sys.path.insert(0, path_root)
+    from ifc_book_prototype import benchmark as benchmark_module
+    from ifc_book_prototype.cli import run_pipeline_job
+    from ifc_book_prototype.domain import PipelineManifest
+    from ifc_book_prototype.runtime_gate import (
+        RuntimeGateThresholds,
+        evaluate_runtime_gate_from_run_dir,
+        format_runtime_gate_human,
+        format_runtime_gate_machine,
+    )
 
 try:
     import tkinter as tk

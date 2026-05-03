@@ -308,8 +308,9 @@ def render_schedule_svg(schedule: ScheduleSheet, profile: StyleProfile) -> str:
     table_y = 38.0
     row_height = 8.0
     class_x = table_x + 2.0
-    label_x = table_x + 38.0
-    storey_x = table_x + 127.0
+    preview_x = table_x + 35.5
+    label_x = table_x + 61.0
+    storey_x = table_x + 130.0
     count_x = table_x + 171.0
     table_width = 178.0
     table_height = row_height * (len(schedule.rows) + 1)
@@ -319,7 +320,7 @@ def render_schedule_svg(schedule: ScheduleSheet, profile: StyleProfile) -> str:
         f'<rect x="{table_x}" y="{table_y}" width="{table_width}" height="{table_height}" fill="#fffefb" stroke="#0f172a" stroke-width="0.25"/>',
     ]
 
-    for divider_x in (table_x + 34.0, table_x + 123.0, table_x + 167.0):
+    for divider_x in (table_x + 34.0, table_x + 58.0, table_x + 126.0, table_x + 167.0):
         rows.append(
             f'<line x1="{divider_x}" y1="{table_y}" x2="{divider_x}" y2="{table_y + table_height}" stroke="#94a3b8" stroke-width="0.18"/>'
         )
@@ -331,6 +332,7 @@ def render_schedule_svg(schedule: ScheduleSheet, profile: StyleProfile) -> str:
     rows.extend(
         [
             _text(class_x, table_y + 5.5, "Class", 3.8, weight="700"),
+            _text(preview_x, table_y + 5.5, "Preview", 3.8, weight="700"),
             _text(label_x, table_y + 5.5, schedule.label_header, 3.8, weight="700"),
             _text(storey_x, table_y + 5.5, "Storey", 3.8, weight="700"),
             _text(count_x, table_y + 5.5, "Count", 3.8, weight="700"),
@@ -342,8 +344,9 @@ def render_schedule_svg(schedule: ScheduleSheet, profile: StyleProfile) -> str:
         rows.extend(
             [
                 _text(class_x, baseline, row.ifc_class.replace("Ifc", ""), 3.4),
-                _text(label_x, baseline, _truncate(row.label, 42), 3.4),
-                _text(storey_x, baseline, _truncate(row.storey_name, 18), 3.4),
+                _schedule_preview_symbol(row.ifc_class, preview_x, table_y + index * row_height + 1.2, 20.0, 5.6),
+                _text(label_x, baseline, _truncate(row.label, 31), 3.4),
+                _text(storey_x, baseline, _truncate(row.storey_name, 15), 3.4),
                 _text(count_x, baseline, str(row.count), 3.4, weight="700"),
             ]
         )
@@ -360,6 +363,75 @@ def render_schedule_svg(schedule: ScheduleSheet, profile: StyleProfile) -> str:
         body="\n".join(rows + notes),
         profile=profile,
     )
+
+
+def _schedule_preview_symbol(ifc_class: str, x: float, y: float, width: float, height: float) -> str:
+    class_name = ifc_class.strip()
+    stroke = "#1e3a5f"
+    muted = "#64748b"
+    fill = "#fffefb"
+    cx = x + width / 2.0
+    cy = y + height / 2.0
+    left = x + 1.0
+    right = x + width - 1.0
+    top = y + 0.6
+    bottom = y + height - 0.6
+
+    if class_name == "IfcDoor":
+        hinge_x = left + 2.0
+        hinge_y = bottom
+        leaf_x = hinge_x + min(7.0, width * 0.38)
+        return "\n".join(
+            [
+                f'<line x1="{left:.3f}" y1="{bottom:.3f}" x2="{right:.3f}" y2="{bottom:.3f}" stroke="{muted}" stroke-width="0.18"/>',
+                f'<line x1="{hinge_x:.3f}" y1="{hinge_y:.3f}" x2="{leaf_x:.3f}" y2="{top:.3f}" stroke="{stroke}" stroke-width="0.35"/>',
+                f'<path d="M {hinge_x:.3f} {hinge_y:.3f} L {leaf_x:.3f} {hinge_y:.3f} L {leaf_x:.3f} {top:.3f}" fill="none" stroke="{stroke}" stroke-width="0.16"/>',
+            ]
+        )
+    if class_name == "IfcWindow":
+        return "\n".join(
+            [
+                f'<rect x="{left:.3f}" y="{cy - 1.3:.3f}" width="{right - left:.3f}" height="2.6" fill="{fill}" stroke="{stroke}" stroke-width="0.28"/>',
+                f'<line x1="{cx:.3f}" y1="{cy - 1.3:.3f}" x2="{cx:.3f}" y2="{cy + 1.3:.3f}" stroke="{stroke}" stroke-width="0.18"/>',
+                f'<line x1="{left + 2.0:.3f}" y1="{cy:.3f}" x2="{right - 2.0:.3f}" y2="{cy:.3f}" stroke="{muted}" stroke-width="0.14"/>',
+            ]
+        )
+    if class_name == "IfcStair":
+        step_w = (right - left) / 5.0
+        segments = [f"M {left:.3f} {bottom:.3f}"]
+        for step in range(1, 6):
+            sx = left + step * step_w
+            sy = bottom - step * ((bottom - top) / 5.0)
+            segments.append(f"L {sx:.3f} {bottom - (step - 1) * ((bottom - top) / 5.0):.3f}")
+            segments.append(f"L {sx:.3f} {sy:.3f}")
+        return "\n".join(
+            [
+                f'<path d="{" ".join(segments)}" fill="none" stroke="{stroke}" stroke-width="0.24"/>',
+                f'<path d="M {left + 2.0:.3f} {bottom - 0.4:.3f} L {right - 2.0:.3f} {top + 0.4:.3f}" fill="none" stroke="{muted}" stroke-width="0.16"/>',
+            ]
+        )
+    if class_name == "IfcRamp":
+        return f'<path d="M {left:.3f} {bottom:.3f} L {right:.3f} {bottom:.3f} L {right:.3f} {top:.3f} Z" fill="#e0f2fe" stroke="{stroke}" stroke-width="0.24"/>'
+    if class_name == "IfcSpace":
+        return "\n".join(
+            [
+                f'<rect x="{left:.3f}" y="{top:.3f}" width="{right - left:.3f}" height="{bottom - top:.3f}" fill="#ffffff" stroke="#b45309" stroke-width="0.2"/>',
+                _text(cx - 1.0, cy + 1.0, "R", 2.8, fill="#92400e", weight="700"),
+            ]
+        )
+    if class_name in {"IfcColumn", "IfcMember"}:
+        size = min(width, height) - 1.2
+        return f'<rect x="{cx - size / 2:.3f}" y="{cy - size / 2:.3f}" width="{size:.3f}" height="{size:.3f}" fill="#d6b39b" stroke="#111827" stroke-width="0.28"/>'
+    if class_name == "IfcBeam":
+        return f'<rect x="{left:.3f}" y="{cy - 1.1:.3f}" width="{right - left:.3f}" height="2.2" fill="#d6b39b" stroke="#111827" stroke-width="0.24"/>'
+    if class_name == "IfcSlab":
+        return "\n".join(
+            [
+                f'<rect x="{left:.3f}" y="{cy - 1.4:.3f}" width="{right - left:.3f}" height="2.8" fill="#e5e7eb" stroke="#334155" stroke-width="0.2"/>',
+                f'<line x1="{left + 1.5:.3f}" y1="{cy + 1.4:.3f}" x2="{right - 1.5:.3f}" y2="{cy - 1.4:.3f}" stroke="{muted}" stroke-width="0.14"/>',
+            ]
+        )
+    return f'<line x1="{left:.3f}" y1="{cy:.3f}" x2="{right:.3f}" y2="{cy:.3f}" stroke="{muted}" stroke-width="0.2"/>'
 
 
 def render_view_svg(
