@@ -19,13 +19,10 @@ class FeatureOverlayRule:
     enabled: bool = True
     show_legend: bool = True
     leader_enabled: bool = True
-    doors_enabled: bool = True
     stairs_enabled: bool = True
     rooms_enabled: bool = True
-    max_door_markers: int = 120
     max_stair_arrows: int = 60
     max_room_tags: int = 80
-    door_color: str = "#1d4ed8"
     stair_color: str = "#0f766e"
     room_fill_color: str = "#ffffff"
     room_stroke_color: str = "#b45309"
@@ -34,7 +31,6 @@ class FeatureOverlayRule:
     leader_color: str = "#94a3b8"
     leader_stroke_width: float = 0.16
     leader_dasharray: str = "0.7 0.7"
-    door_label: str = "D"
     stair_label: str = "UP"
     room_label_mode: str = "sequential"
     room_label_prefix: str = "R"

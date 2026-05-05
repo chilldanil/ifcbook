@@ -453,7 +453,6 @@ def render_view_svg(
         ("Geometry backend", geometry.backend),
         ("Source elements", str(geometry.source_elements)),
         ("Line paths", str(geometry.path_count)),
-        ("Door markers", str(feature_counts["IfcDoor"])),
         ("Stair arrows", str(feature_counts["IfcStair"])),
         ("Room tags", str(feature_counts["IfcSpace"])),
         ("Cut classes", _format_class_counts(geometry.cut_candidates)),
@@ -568,7 +567,7 @@ def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y:
             _text(x, y - 5.0, "Plan features from IFC semantic anchors", 3.5, fill="#334155"),
             f'<rect x="{x}" y="{y}" width="{width}" height="{height}" fill="#fffefb" stroke="#cbd5e1" stroke-width="0.25"/>',
         ]
-        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
         drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
         drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
         return "\n".join(drawing)
@@ -593,7 +592,7 @@ def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y:
         drawing.append(_polygon_path(polygon, transform, stroke="#334155", fill="none", stroke_width=0.18, dash="1.3 1.3"))
     for polygon in cut_polygons:
         drawing.append(_polygon_path(polygon, transform, stroke="#5c2d18", fill="#d6b39b", stroke_width=0.28))
-    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+    drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
     drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
@@ -626,7 +625,7 @@ def _plan_linework(geometry: GeometrySummary, profile: StyleProfile, x: float, y
             )
         )
     if with_features:
-        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
     drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
@@ -748,7 +747,7 @@ def _plan_linework_typed(
             )
         )
     if with_features:
-        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height, _viewport_scale(geometry.bounds, width, height)))
+        drawing.extend(_feature_annotations(geometry, profile, transform, x, y, width, height))
     drawing.extend(_overall_dims(bounds, transform, x, y, width, height))
     drawing.append(_text(x + 2.0, y + height - 3.0, _format_bounds(bounds), 2.7, fill="#475569"))
     return "\n".join(drawing)
@@ -785,10 +784,6 @@ def _lineweight_for_path(path: VectorPath, profile: StyleProfile, role: str) -> 
     return profile.lineweights_mm.get("cut_secondary", 0.25)
 
 
-_MIN_DOOR_LEAF_MM = 2.5   # minimum symbol size regardless of scale
-_DEFAULT_DOOR_WIDTH_M = 0.9
-
-
 def _feature_annotations(
     geometry: GeometrySummary,
     profile: StyleProfile,
@@ -797,7 +792,6 @@ def _feature_annotations(
     y: float,
     width: float,
     height: float,
-    draw_scale: float = 1.0,
 ) -> List[str]:
     overlay = profile.floor_plan.feature_overlay
     if not overlay.enabled:
@@ -805,52 +799,14 @@ def _feature_annotations(
     primitives = _collect_feature_primitives(geometry, overlay)
     drawing: List[str] = []
 
-    max_door_markers = max(0, int(overlay.max_door_markers))
     max_stair_arrows = max(0, int(overlay.max_stair_arrows))
     max_room_tags = max(0, int(overlay.max_room_tags))
-    door_markers = primitives["IfcDoor"][:max_door_markers] if overlay.doors_enabled else []
     stair_arrows = primitives["IfcStair"][:max_stair_arrows] if overlay.stairs_enabled else []
     room_tags = primitives["IfcSpace"][:max_room_tags] if overlay.rooms_enabled else []
 
     placed_boxes: List[Tuple[float, float, float, float]] = []
     offsets = _placement_offsets(step=3.2, rings=6)
     frame = (x, y, x + width, y + height)
-
-    for primitive in door_markers:
-        anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
-        ux, uy = _feature_direction_screen(transform, primitive)
-        door_swing_sign = _door_swing_sign_from_semantics(primitive)
-        door_w = primitive.width_m or _DEFAULT_DOOR_WIDTH_M
-        leaf_len = max(_MIN_DOOR_LEAF_MM, door_w * draw_scale)
-        sx, sy, bbox, moved = _resolve_symbol_placement(
-            symbol_kind="door",
-            anchor_sx=anchor_sx,
-            anchor_sy=anchor_sy,
-            ux=ux,
-            uy=uy,
-            door_swing_sign=door_swing_sign,
-            offsets=offsets,
-            placed_boxes=placed_boxes,
-            frame=frame,
-            leaf_len=leaf_len,
-        )
-        if moved and overlay.leader_enabled:
-            drawing.append(
-                f'<line x1="{round(anchor_sx, 3)}" y1="{round(anchor_sy, 3)}" '
-                f'x2="{round(sx, 3)}" y2="{round(sy, 3)}" '
-                f'stroke="{overlay.leader_color}" stroke-width="{overlay.leader_stroke_width}" '
-                f'stroke-dasharray="{overlay.leader_dasharray}" data-feature="leader"/>'
-            )
-        drawing.extend(
-            _door_symbol(
-                sx, sy, ux, uy,
-                swing_sign=door_swing_sign,
-                color=overlay.door_color,
-                label_text=overlay.door_label.strip() or "D",
-                leaf_len=leaf_len,
-            )
-        )
-        placed_boxes.append(bbox)
 
     for primitive in stair_arrows:
         anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
@@ -917,20 +873,17 @@ def _feature_annotations(
         )
         placed_boxes.append(bbox)
 
-    door_total = len(primitives["IfcDoor"])
     stair_total = len(primitives["IfcStair"])
     room_total = len(primitives["IfcSpace"])
     suffix = ""
     if (
-        (overlay.doors_enabled and door_total > max_door_markers)
-        or (overlay.stairs_enabled and stair_total > max_stair_arrows)
+        (overlay.stairs_enabled and stair_total > max_stair_arrows)
         or (overlay.rooms_enabled and room_total > max_room_tags)
     ):
         suffix = " (sampled)"
     if overlay.show_legend:
         legend = (
             "Feature overlay | "
-            f"Doors: {_feature_count_token(overlay.doors_enabled, door_total)} | "
             f"Stairs: {_feature_count_token(overlay.stairs_enabled, stair_total)} | "
             f"Rooms: {_feature_count_token(overlay.rooms_enabled, room_total)}{suffix}"
         )
@@ -945,7 +898,6 @@ def _feature_count_token(enabled: bool, count: int) -> str:
 def _feature_annotation_counts(geometry: GeometrySummary) -> Dict[str, int]:
     primitives = _collect_feature_primitives(geometry)
     return {
-        "IfcDoor": len(primitives["IfcDoor"]),
         "IfcStair": len(primitives["IfcStair"]),
         "IfcSpace": len(primitives["IfcSpace"]),
     }
@@ -967,11 +919,6 @@ class _FeaturePrimitive:
         "ifc_class",
         "label",
         "display_label",
-        "door_handedness",
-        "semantic_source",
-        "semantic_confidence",
-        "host_element",
-        "width_m",
     )
 
     def __init__(
@@ -983,11 +930,6 @@ class _FeaturePrimitive:
         ifc_class: str,
         label: str | None = None,
         display_label: str | None = None,
-        door_handedness: str | None = None,
-        semantic_source: str | None = None,
-        semantic_confidence: float | None = None,
-        host_element: str | None = None,
-        width_m: float | None = None,
     ):
         self.anchor = anchor
         self.dir_x = dir_x
@@ -996,11 +938,6 @@ class _FeaturePrimitive:
         self.ifc_class = ifc_class
         self.label = label
         self.display_label = display_label
-        self.door_handedness = door_handedness
-        self.semantic_source = semantic_source
-        self.semantic_confidence = semantic_confidence
-        self.host_element = host_element
-        self.width_m = width_m
 
 
 def _collect_feature_primitives(
@@ -1008,7 +945,7 @@ def _collect_feature_primitives(
     overlay: FeatureOverlayRule | None = None,
 ) -> Dict[str, List[_FeaturePrimitive]]:
     overlay = overlay or FeatureOverlayRule()
-    classes = ("IfcDoor", "IfcStair", "IfcSpace")
+    classes = ("IfcStair", "IfcSpace")
     grouped: Dict[str, Dict[Tuple[int, int], _FeaturePrimitive]] = {class_name: {} for class_name in classes}
     semantic_priority_length = 1000.0
 
@@ -1026,11 +963,6 @@ def _collect_feature_primitives(
             ifc_class=class_name,
             label=anchor.label,
             display_label=anchor.display_label,
-            door_handedness=anchor.door_handedness,
-            semantic_source=anchor.semantic_source,
-            semantic_confidence=anchor.semantic_confidence,
-            host_element=anchor.host_element,
-            width_m=getattr(anchor, "width_m", None),
         )
         existing = grouped[class_name].get(bucket)
         if existing is None or primitive.length > existing.length:
@@ -1066,7 +998,6 @@ def _collect_feature_primitives(
             grouped[class_name].values(),
             key=lambda primitive: (primitive.anchor.y, primitive.anchor.x, -primitive.length),
         )
-    result["IfcDoor"] = _align_doors_to_host(result["IfcDoor"], _collect_wall_segments(geometry))
     result["IfcSpace"] = _label_rooms(result["IfcSpace"], overlay)
     return result
 
@@ -1131,97 +1062,6 @@ def _infer_direction(points: List[Point2D]) -> Tuple[float, float, float]:
     return ux, uy, fallback_length
 
 
-def _collect_wall_segments(geometry: GeometrySummary) -> List[Tuple[float, float, float, float]]:
-    segments: List[Tuple[float, float, float, float]] = []
-    for class_name, points in _iter_class_points(geometry):
-        if class_name != "IfcWall" or len(points) < 2:
-            continue
-        for idx in range(len(points) - 1):
-            start = points[idx]
-            end = points[idx + 1]
-            dx = end.x - start.x
-            dy = end.y - start.y
-            if math.hypot(dx, dy) <= 1.0e-9:
-                continue
-            segments.append((start.x, start.y, end.x, end.y))
-    segments.sort(key=lambda value: (value[0], value[1], value[2], value[3]))
-    return segments
-
-
-def _align_doors_to_host(
-    doors: List[_FeaturePrimitive],
-    wall_segments: List[Tuple[float, float, float, float]],
-) -> List[_FeaturePrimitive]:
-    if not doors or not wall_segments:
-        return doors
-    aligned: List[_FeaturePrimitive] = []
-    threshold_m = 1.8
-    for primitive in doors:
-        ax = primitive.anchor.x
-        ay = primitive.anchor.y
-        context = _nearest_wall_context(ax, ay, wall_segments)
-        if context is None:
-            aligned.append(primitive)
-            continue
-        distance, proj_x, proj_y, tx, ty = context
-        if distance > threshold_m:
-            aligned.append(primitive)
-            continue
-        nx = -ty
-        ny = tx
-        side = primitive.dir_x * nx + primitive.dir_y * ny
-        if abs(side) < 0.15:
-            anchor_vec_x = ax - proj_x
-            anchor_vec_y = ay - proj_y
-            side = anchor_vec_x * nx + anchor_vec_y * ny
-        sign = 1.0 if side >= 0.0 else -1.0
-        aligned.append(
-            _FeaturePrimitive(
-                anchor=Point2D(x=round(proj_x, 4), y=round(proj_y, 4)),
-                dir_x=nx * sign,
-                dir_y=ny * sign,
-                length=primitive.length,
-                ifc_class=primitive.ifc_class,
-                label=primitive.label,
-                display_label=primitive.display_label,
-                door_handedness=primitive.door_handedness,
-                semantic_source=primitive.semantic_source,
-                semantic_confidence=primitive.semantic_confidence,
-                host_element=primitive.host_element,
-                width_m=primitive.width_m,
-            )
-        )
-    return aligned
-
-
-def _nearest_wall_context(
-    ax: float,
-    ay: float,
-    segments: List[Tuple[float, float, float, float]],
-) -> Tuple[float, float, float, float, float] | None:
-    best: Tuple[float, float, float, float, float] | None = None
-    for x1, y1, x2, y2 in segments:
-        vx = x2 - x1
-        vy = y2 - y1
-        length_sq = vx * vx + vy * vy
-        if length_sq <= 1.0e-12:
-            continue
-        t = ((ax - x1) * vx + (ay - y1) * vy) / length_sq
-        t = max(0.0, min(1.0, t))
-        px = x1 + t * vx
-        py = y1 + t * vy
-        dx = ax - px
-        dy = ay - py
-        dist = math.hypot(dx, dy)
-        seg_len = math.sqrt(length_sq)
-        tx = vx / seg_len
-        ty = vy / seg_len
-        candidate = (dist, px, py, tx, ty)
-        if best is None or candidate[0] < best[0]:
-            best = candidate
-    return best
-
-
 def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -> List[_FeaturePrimitive]:
     labeled: List[_FeaturePrimitive] = []
     mode = overlay.room_label_mode.strip().lower()
@@ -1249,10 +1089,6 @@ def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -
                 ifc_class=primitive.ifc_class,
                 label=label,
                 display_label=primitive.display_label,
-                door_handedness=primitive.door_handedness,
-                semantic_source=primitive.semantic_source,
-                semantic_confidence=primitive.semantic_confidence,
-                host_element=primitive.host_element,
             )
         )
     return labeled
@@ -1287,20 +1123,18 @@ def _resolve_symbol_placement(
     placed_boxes: List[Tuple[float, float, float, float]],
     frame: Tuple[float, float, float, float],
     label: str | None = None,
-    door_swing_sign: float = 1.0,
-    leaf_len: float = 3.0,
 ) -> Tuple[float, float, Tuple[float, float, float, float], bool]:
     for dx, dy in offsets:
         sx = anchor_sx + dx
         sy = anchor_sy + dy
-        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label, door_swing_sign=door_swing_sign, leaf_len=leaf_len)
+        bbox = _symbol_bbox(symbol_kind, sx, sy, ux, uy, label=label)
         if not _bbox_inside(bbox, frame):
             continue
         if any(_bbox_intersects(bbox, existing, padding=0.6) for existing in placed_boxes):
             continue
         moved = abs(dx) > 1.0e-9 or abs(dy) > 1.0e-9
         return sx, sy, bbox, moved
-    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label, door_swing_sign=door_swing_sign, leaf_len=leaf_len)
+    fallback_bbox = _symbol_bbox(symbol_kind, anchor_sx, anchor_sy, ux, uy, label=label)
     return anchor_sx, anchor_sy, fallback_bbox, False
 
 
@@ -1311,13 +1145,8 @@ def _symbol_bbox(
     ux: float,
     uy: float,
     label: str | None = None,
-    door_swing_sign: float = 1.0,
-    leaf_len: float = 3.0,
 ) -> Tuple[float, float, float, float]:
-    if symbol_kind == "door":
-        points = _door_anchor_points(sx, sy, ux, uy, swing_sign=door_swing_sign, leaf_len=leaf_len)
-        margin = 1.3
-    elif symbol_kind == "stair":
+    if symbol_kind == "stair":
         points = _stair_anchor_points(sx, sy, ux, uy)
         margin = 1.4
     else:
@@ -1349,62 +1178,6 @@ def _bbox_intersects(
         or ly1 + padding < ry0
         or ry1 + padding < ly0
     )
-
-
-def _door_symbol(
-    sx: float,
-    sy: float,
-    ux: float,
-    uy: float,
-    swing_sign: float,
-    color: str,
-    label_text: str,
-    leaf_len: float = 3.0,
-) -> List[str]:
-    # ux,uy = wall normal pointing INTO room (open direction).
-    # The closed leaf lies ALONG the wall: rotate normal 90° by swing_sign.
-    # Along-wall direction for the closed leaf
-    ldx = uy * swing_sign
-    ldy = -ux * swing_sign
-    # Tip of door leaf when closed (along wall)
-    closed_tip_x = sx + ldx * leaf_len
-    closed_tip_y = sy + ldy * leaf_len
-
-    # Quarter-circle arc from closed (along wall) to open (into room)
-    n = 13
-    arc_pts = []
-    for idx in range(n):
-        t = (math.pi / 2.0) * idx / (n - 1)
-        rt = swing_sign * t
-        cos_rt = math.cos(rt)
-        sin_rt = math.sin(rt)
-        rx = ldx * cos_rt - ldy * sin_rt
-        ry = ldx * sin_rt + ldy * cos_rt
-        arc_pts.append((sx + rx * leaf_len, sy + ry * leaf_len))
-
-    arc_cmds = [f"M {arc_pts[0][0]:.3f} {arc_pts[0][1]:.3f}"]
-    for px, py in arc_pts[1:]:
-        arc_cmds.append(f"L {px:.3f} {py:.3f}")
-
-    # Label at the 45° midpoint of the arc (inside the sweep)
-    t_mid = swing_sign * math.pi / 4.0
-    mx = ldx * math.cos(t_mid) - ldy * math.sin(t_mid)
-    my = ldx * math.sin(t_mid) + ldy * math.cos(t_mid)
-    label_x = sx + mx * (leaf_len * 0.55) - 1.0
-    label_y = sy + my * (leaf_len * 0.55) + 0.9
-
-    return [
-        # Closed leaf
-        f'<line x1="{sx:.3f}" y1="{sy:.3f}" x2="{closed_tip_x:.3f}" y2="{closed_tip_y:.3f}" '
-        f'stroke="{color}" stroke-width="0.24"/>',
-        # Swing arc
-        f'<path d="{" ".join(arc_cmds)}" fill="none" stroke="{color}" stroke-width="0.20" '
-        f'stroke-linecap="round" stroke-linejoin="round"/>',
-        # Hinge dot
-        f'<circle cx="{sx:.3f}" cy="{sy:.3f}" r="0.65" fill="{color}" stroke="none"/>',
-        # Label inside the arc
-        _text(label_x, label_y, label_text, 2.3, weight="700", fill=color),
-    ]
 
 
 def _stair_symbol(
@@ -1461,44 +1234,6 @@ def _room_tag_symbol(
         f'height="{round(half_h * 2.0, 3)}" fill="{fill_color}" stroke="{stroke_color}" stroke-width="0.22" rx="0.7" ry="0.7"/>',
         _text(sx - (len(label) * 0.82) / 2.0, sy + 0.8, label, 2.2, weight="700", fill=text_color),
     ]
-
-
-def _door_anchor_points(
-    sx: float,
-    sy: float,
-    ux: float,
-    uy: float,
-    swing_sign: float = 1.0,
-    leaf_len: float = 3.0,
-) -> List[Tuple[float, float]]:
-    ldx = uy * swing_sign
-    ldy = -ux * swing_sign
-    points: List[Tuple[float, float]] = [(sx, sy), (sx + ldx * leaf_len, sy + ldy * leaf_len)]
-    for idx in range(7):
-        t = (math.pi / 2.0) * idx / 6.0
-        rt = swing_sign * t
-        rx = ldx * math.cos(rt) - ldy * math.sin(rt)
-        ry = ldx * math.sin(rt) + ldy * math.cos(rt)
-        points.append((sx + rx * leaf_len, sy + ry * leaf_len))
-    return points
-
-
-def _door_swing_sign_from_semantics(primitive: _FeaturePrimitive) -> float:
-    handedness = (primitive.door_handedness or "").strip().lower()
-    if handedness == "left":
-        return -1.0
-    if handedness == "right":
-        return 1.0
-
-    label = primitive.label
-    if not label:
-        return 1.0
-    hint = label.strip().lower()
-    if hint.startswith("door_swing:"):
-        hint = hint.split(":", 1)[1].strip()
-    if hint == "left":
-        return -1.0
-    return 1.0
 
 
 def _stair_anchor_points(sx: float, sy: float, ux: float, uy: float) -> List[Tuple[float, float]]:

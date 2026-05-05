@@ -10,7 +10,7 @@ from .domain import FeatureOverlayRule, PipelineManifest, SheetArtifact, StylePr
 from .geometry_metrics import summarize_geometry_runtime
 from .pipeline import STAGE_ARTIFACTS, _build_cache_manifest
 from .render_pdf import write_pdf_from_svg_sheets
-from .render_svg import _door_symbol, _room_tag_symbol, _stair_symbol
+from .render_svg import _room_tag_symbol, _stair_symbol
 
 
 METADATA_FILENAMES = (
@@ -50,7 +50,6 @@ def replay_bundle(bundle_dir: Path, output_dir: Path, profile: StyleProfile | No
     warnings = list(source_manifest.get("warnings", []))
     source_preflight = _load_optional_json(bundle_dir / "metadata" / "preflight.json") or {}
     source_counts = source_preflight.get("entity_counts", {}) if isinstance(source_preflight, dict) else {}
-    replay_door_count = int(source_counts.get("IFCDOOR", 0) or 0)
     replay_stair_count = int(source_counts.get("IFCSTAIR", 0) or 0)
     replay_room_count = int(source_counts.get("IFCSPACE", 0) or 0)
     overlay_style = profile.floor_plan.feature_overlay if profile is not None else FeatureOverlayRule()
@@ -67,7 +66,6 @@ def replay_bundle(bundle_dir: Path, output_dir: Path, profile: StyleProfile | No
         if sheet.get("role") == "view":
             _inject_replay_feature_overlay(
                 destination_svg,
-                door_count=replay_door_count,
                 stair_count=replay_stair_count,
                 room_count=replay_room_count,
                 overlay_style=overlay_style,
@@ -225,7 +223,6 @@ def _load_optional_json(path: Path):
 
 def _inject_replay_feature_overlay(
     svg_path: Path,
-    door_count: int,
     stair_count: int,
     room_count: int = 0,
     overlay_style: FeatureOverlayRule | None = None,
@@ -234,32 +231,22 @@ def _inject_replay_feature_overlay(
     overlay_style = overlay_style or FeatureOverlayRule()
     if not overlay_style.enabled:
         return
-    if door_count <= 0 and stair_count <= 0 and room_count <= 0:
+    if stair_count <= 0 and room_count <= 0:
         return
     text = svg_path.read_text(encoding="utf-8")
     marker = "</svg>"
     if marker not in text:
         return
     has_existing_view_overlay = "Feature overlay |" in text
-    door_enabled = bool(overlay_style.doors_enabled)
     stair_enabled = bool(overlay_style.stairs_enabled)
     room_enabled = bool(overlay_style.rooms_enabled)
-    door_label = overlay_style.door_label.strip() or "D"
     stair_label = overlay_style.stair_label.strip() or "UP"
     room_preview = _room_preview_label(overlay_style)
     overlay_parts = [
         f'  <text x="22.0" y="33.0" font-size="2.8" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="{overlay_style.legend_color}">'
-        f"Replay feature overlay | Doors: {_feature_count_token(door_enabled, door_count)} | Stairs: {_feature_count_token(stair_enabled, stair_count)} | Rooms: {_feature_count_token(room_enabled, room_count)}"
+        f"Replay feature overlay | Stairs: {_feature_count_token(stair_enabled, stair_count)} | Rooms: {_feature_count_token(room_enabled, room_count)}"
         "</text>",
     ]
-    if door_enabled and door_count > 0:
-        overlay_parts.extend(
-            [
-                f'  <circle cx="22.0" cy="36.4" r="1.4" fill="#ffffff" stroke="{overlay_style.door_color}" stroke-width="0.22"/>',
-                f'  <text x="21.2" y="37.35" font-size="2.3" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="{overlay_style.door_color}">{door_label}</text>',
-                f'  <text x="25.0" y="37.35" font-size="2.6" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="{overlay_style.door_color}">x {door_count}</text>',
-            ]
-        )
     if stair_enabled and stair_count > 0:
         overlay_parts.extend(
             [
@@ -342,7 +329,7 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
     if transform is None:
         return []
 
-    buckets = {"IfcDoor": [], "IfcStair": [], "IfcSpace": []}
+    buckets = {"IfcStair": [], "IfcSpace": []}
     for item in anchors:
         if not isinstance(item, dict):
             continue
@@ -358,7 +345,6 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
         source = str(item.get("source_element", ""))
         label = str(item.get("label", "") or "")
         display_label = str(item.get("display_label", "") or "")
-        door_handedness = str(item.get("door_handedness", "") or "")
         buckets[class_name].append(
             {
                 "x": x,
@@ -368,29 +354,12 @@ def _render_replay_view_symbols(view_overlay: dict | None, overlay_style: Featur
                 "source_element": source,
                 "label": label,
                 "display_label": display_label,
-                "door_handedness": door_handedness,
             }
         )
     for key in buckets:
         buckets[key].sort(key=lambda item: (item["source_element"], item["y"], item["x"]))
 
     lines: List[str] = []
-    if overlay_style.doors_enabled:
-        for item in buckets["IfcDoor"][: max(0, int(overlay_style.max_door_markers))]:
-            sx, sy = transform(item["x"], item["y"])
-            ux, uy = _normalize_2d(item["dir_x"], item["dir_y"])
-            label = overlay_style.door_label.strip() or "D"
-            lines.extend(
-                _door_symbol(
-                    sx,
-                    sy,
-                    ux,
-                    uy,
-                    swing_sign=_door_swing_sign_from_anchor(item),
-                    color=overlay_style.door_color,
-                    label_text=label,
-                )
-            )
     if overlay_style.stairs_enabled:
         for item in buckets["IfcStair"][: max(0, int(overlay_style.max_stair_arrows))]:
             sx, sy = transform(item["x"], item["y"])
@@ -448,15 +417,3 @@ def _normalize_2d(x: float, y: float):
     if length <= 1.0e-9:
         return 1.0, 0.0
     return x / length, y / length
-
-
-def _door_swing_sign_from_anchor(item: dict) -> float:
-    handedness = str(item.get("door_handedness", "") or "").strip().lower()
-    if handedness == "left":
-        return -1.0
-    if handedness == "right":
-        return 1.0
-    label = str(item.get("label", "") or "").strip().lower()
-    if label.startswith("door_swing:"):
-        label = label.split(":", 1)[1].strip()
-    return -1.0 if label == "left" else 1.0

@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 out/
 samples/*.ifc
+samples/2026_BIMprojects/

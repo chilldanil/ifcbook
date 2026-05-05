@@ -43,7 +43,7 @@ def _view() -> PlannedView:
     )
 
 
-def test_svg_contains_feature_overlay_for_doors_and_stairs():
+def test_svg_contains_feature_overlay_for_stairs_but_no_door_markers():
     profile = load_style_profile()
     geometry = GeometrySummary(
         view_id="floor_plan_01",
@@ -67,10 +67,10 @@ def test_svg_contains_feature_overlay_for_doors_and_stairs():
         ],
     )
     svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 1 | Stairs: 1 | Rooms: 0" in svg
-    assert ">D</text>" in svg
+    assert "Feature overlay | Stairs: 1 | Rooms: 0" in svg
+    assert ">D</text>" not in svg
     assert ">UP</text>" in svg
-    assert "Door markers" in svg
+    assert "Door markers" not in svg
     assert "Stair arrows" in svg
     assert "Room tags" in svg
 
@@ -101,34 +101,7 @@ def test_feature_overlay_is_deterministic_for_same_input():
     svg_a = render_view_svg(_model(), _view(), geometry, profile)
     svg_b = render_view_svg(_model(), _view(), geometry, profile)
     assert svg_a == svg_b
-
-
-def test_feature_overlay_applies_collision_avoidance_with_leader():
-    profile = load_style_profile()
-    geometry = GeometrySummary(
-        view_id="floor_plan_01",
-        backend="ifcopenshell-svg-floorplan",
-        cut_candidates={"IfcDoor": 2},
-        projection_candidates={},
-        source_elements=2,
-        path_count=2,
-        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=200.0, max_y=200.0),
-        paths=[
-            VectorPath(
-                role="projection",
-                ifc_class="IfcDoor",
-                points=[Point2D(10.0, 100.0), Point2D(10.8, 100.0)],
-            ),
-            VectorPath(
-                role="projection",
-                ifc_class="IfcDoor",
-                points=[Point2D(10.7, 100.0), Point2D(11.5, 100.0)],
-            ),
-        ],
-    )
-    svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 2 | Stairs: 0 | Rooms: 0" in svg
-    assert 'data-feature="leader"' in svg
+    assert ">D</text>" not in svg_a
 
 
 def test_feature_overlay_adds_room_tag_labels():
@@ -151,34 +124,8 @@ def test_feature_overlay_adds_room_tag_labels():
         ],
     )
     svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 0 | Stairs: 0 | Rooms: 1" in svg
+    assert "Feature overlay | Stairs: 0 | Rooms: 1" in svg
     assert ">R-001</text>" in svg
-
-
-def test_profile_can_disable_doors_in_overlay():
-    profile = load_style_profile()
-    overlay = replace(profile.floor_plan.feature_overlay, doors_enabled=False)
-    floor_plan = replace(profile.floor_plan, feature_overlay=overlay)
-    profile = replace(profile, floor_plan=floor_plan)
-    geometry = GeometrySummary(
-        view_id="floor_plan_01",
-        backend="ifcopenshell-svg-floorplan",
-        cut_candidates={"IfcDoor": 1},
-        projection_candidates={},
-        source_elements=1,
-        path_count=1,
-        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=2.0, max_y=2.0),
-        paths=[
-            VectorPath(
-                role="projection",
-                ifc_class="IfcDoor",
-                points=[Point2D(0.0, 0.0), Point2D(1.0, 0.0)],
-            )
-        ],
-    )
-    svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: off | Stairs: 0 | Rooms: 0" in svg
-    assert ">D</text>" not in svg
 
 
 def test_profile_fixed_room_label_policy_is_respected():
@@ -208,7 +155,7 @@ def test_profile_fixed_room_label_policy_is_respected():
         ],
     )
     svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 0 | Stairs: 0 | Rooms: 1" in svg
+    assert "Feature overlay | Stairs: 0 | Rooms: 1" in svg
     assert ">SPACE</text>" in svg
 
 
@@ -241,92 +188,9 @@ def test_semantic_feature_anchors_render_without_class_paths():
         ],
     )
     svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 1 | Stairs: 1 | Rooms: 0" in svg
-    assert ">D</text>" in svg
+    assert "Feature overlay | Stairs: 1 | Rooms: 0" in svg
+    assert ">D</text>" not in svg
     assert ">UP</text>" in svg
-
-
-def test_door_semantic_left_right_hints_produce_different_deterministic_svg():
-    profile = load_style_profile()
-    left_geometry = GeometrySummary(
-        view_id="floor_plan_01",
-        backend="ifcopenshell-svg-floorplan",
-        cut_candidates={},
-        projection_candidates={},
-        source_elements=1,
-        path_count=0,
-        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=20.0, max_y=20.0),
-        paths=[],
-        feature_anchors=[
-            FeatureAnchor2D(
-                ifc_class="IfcDoor",
-                anchor=Point2D(5.0, 5.0),
-                dir_x=1.0,
-                dir_y=0.0,
-                source_element="door-left",
-                label="door_swing:left",
-            )
-        ],
-    )
-    right_geometry = replace(
-        left_geometry,
-        feature_anchors=[
-            replace(left_geometry.feature_anchors[0], source_element="door-right", label="door_swing:right")
-        ],
-    )
-
-    left_svg_a = render_view_svg(_model(), _view(), left_geometry, profile)
-    left_svg_b = render_view_svg(_model(), _view(), left_geometry, profile)
-    right_svg_a = render_view_svg(_model(), _view(), right_geometry, profile)
-    right_svg_b = render_view_svg(_model(), _view(), right_geometry, profile)
-
-    assert left_svg_a == left_svg_b
-    assert right_svg_a == right_svg_b
-    assert left_svg_a != right_svg_a
-    assert ">D</text>" in left_svg_a
-    assert ">D</text>" in right_svg_a
-
-
-def test_door_structured_handedness_takes_precedence_over_legacy_label():
-    profile = load_style_profile()
-    left_geometry = GeometrySummary(
-        view_id="floor_plan_01",
-        backend="ifcopenshell-svg-floorplan",
-        cut_candidates={},
-        projection_candidates={},
-        source_elements=1,
-        path_count=0,
-        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=20.0, max_y=20.0),
-        paths=[],
-        feature_anchors=[
-            FeatureAnchor2D(
-                ifc_class="IfcDoor",
-                anchor=Point2D(5.0, 5.0),
-                dir_x=1.0,
-                dir_y=0.0,
-                source_element="door-left",
-                door_handedness="left",
-                label="door_swing:right",
-            )
-        ],
-    )
-    right_geometry = replace(
-        left_geometry,
-        feature_anchors=[
-            replace(
-                left_geometry.feature_anchors[0],
-                source_element="door-right",
-                door_handedness="right",
-            )
-        ],
-    )
-
-    left_svg = render_view_svg(_model(), _view(), left_geometry, profile)
-    right_svg = render_view_svg(_model(), _view(), right_geometry, profile)
-
-    assert left_svg != right_svg
-    assert ">D</text>" in left_svg
-    assert ">D</text>" in right_svg
 
 
 def test_room_label_mode_ifc_name_uses_semantic_label():
@@ -355,7 +219,7 @@ def test_room_label_mode_ifc_name_uses_semantic_label():
         ],
     )
     svg = render_view_svg(_model(), _view(), geometry, profile)
-    assert "Feature overlay | Doors: 0 | Stairs: 0 | Rooms: 1" in svg
+    assert "Feature overlay | Stairs: 0 | Rooms: 1" in svg
     assert ">Living Room</text>" in svg
 
 
