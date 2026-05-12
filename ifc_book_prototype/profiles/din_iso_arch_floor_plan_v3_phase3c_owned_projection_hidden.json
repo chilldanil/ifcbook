@@ -39,6 +39,7 @@
       "leader_enabled": true,
       "stairs_enabled": true,
       "rooms_enabled": true,
+      "doors_enabled": false,
       "max_stair_arrows": 60,
       "max_room_tags": 80,
       "stair_color": "#0f766e",
@@ -50,7 +51,7 @@
       "leader_stroke_width": 0.16,
       "leader_dasharray": "0.7 0.7",
       "stair_label": "UP",
-      "room_label_mode": "sequential",
+      "room_label_mode": "ifc_name",
       "room_label_prefix": "R",
       "room_label_start": 1,
       "room_fixed_label": "ROOM"

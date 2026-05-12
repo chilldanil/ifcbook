@@ -612,14 +612,29 @@ def merge_owned_lines_into(
     serializer are dropped in favor of the owned lines (even if the owned set
     is empty — "own it or bust"). HIDDEN lines are additive because the
     serializer never produces HIDDEN today.
+
+    Exception: IfcDoor PROJECTED lines from the serializer are retained even
+    under suppression. The owned/OCCT path only emits straight BRep edges, so
+    door *swing arcs* (which the serializer composes from IFC opening
+    relationships) would otherwise vanish entirely.
     """
     from .domain import LineKind  # local import to keep module load cheap
 
-    kept = (
-        [line for line in base_lines if line.kind is not LineKind.PROJECTED]
-        if suppress_serializer_projection
-        else list(base_lines)
-    )
+    # Only honor the suppression flag when the owned path actually produced
+    # projection lines. Otherwise the storey would render as "doors floating in
+    # space": serializer geometry (walls/slabs/columns) would be dropped while
+    # the IfcDoor exception keeps the swing arcs — a worse output than the
+    # serializer baseline. This commonly happens on structural reference
+    # storeys where owned-projection element selection finds nothing.
+    if suppress_serializer_projection and owned_projection:
+        kept = [
+            line
+            for line in base_lines
+            if line.kind is not LineKind.PROJECTED
+            or line.source_ifc_class == "IfcDoor"
+        ]
+    else:
+        kept = list(base_lines)
     kept.extend(owned_projection)
 
     # Hidden lines that coincide with visible lines read as drafting noise.

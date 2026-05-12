@@ -21,12 +21,17 @@ class FeatureOverlayRule:
     leader_enabled: bool = True
     stairs_enabled: bool = True
     rooms_enabled: bool = True
+    doors_enabled: bool = True
     max_stair_arrows: int = 60
     max_room_tags: int = 80
+    max_door_symbols: int = 200
     stair_color: str = "#0f766e"
     room_fill_color: str = "#ffffff"
     room_stroke_color: str = "#b45309"
     room_text_color: str = "#92400e"
+    door_color: str = "#1e3a8a"
+    door_arc_color: str = "#3b82f6"
+    door_default_width_m: float = 0.9
     legend_color: str = "#334155"
     leader_color: str = "#94a3b8"
     leader_stroke_width: float = 0.16

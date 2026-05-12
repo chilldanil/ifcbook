@@ -85,7 +85,7 @@ def test_typed_plan_svg_snapshot_hash_is_stable():
     )
     svg = render_view_svg(_make_model(), _make_view(), geometry, profile)
     assert hashlib.sha256(svg.encode("utf-8")).hexdigest() == (
-        "1b733c7f0dc09bdfd7586fed6b7332a694a2e04de53acc7325d98deacef93488"
+        "9528620068fd3e20adf2391024cddcd64abca4bb53a48bae127653ed6b912376"
     )
     assert 'stroke-dasharray="1.3 1.3"' in svg
     assert "typed geometry kernel" in svg

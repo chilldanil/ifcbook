@@ -869,12 +869,34 @@ def _feature_annotations(
 
     max_stair_arrows = max(0, int(overlay.max_stair_arrows))
     max_room_tags = max(0, int(overlay.max_room_tags))
+    max_door_symbols = max(0, int(overlay.max_door_symbols))
     stair_arrows = primitives["IfcStair"][:max_stair_arrows] if overlay.stairs_enabled else []
     room_tags = primitives["IfcSpace"][:max_room_tags] if overlay.rooms_enabled else []
+    door_symbols = primitives["IfcDoor"][:max_door_symbols] if overlay.doors_enabled else []
 
     placed_boxes: List[Tuple[float, float, float, float]] = []
     offsets = _placement_offsets(step=3.2, rings=6)
     frame = (x, y, x + width, y + height)
+
+    # Doors draw before stair/room labels so leaders / labels paint on top.
+    if door_symbols:
+        page_scale = _page_units_per_world_meter(transform)
+        for primitive in door_symbols:
+            anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
+            ux, uy = _feature_direction_screen(transform, primitive)
+            door_width_m = primitive.width_m or overlay.door_default_width_m
+            drawing.extend(
+                _door_swing_symbol(
+                    anchor_sx,
+                    anchor_sy,
+                    ux,
+                    uy,
+                    door_width_page=max(1.0, door_width_m * page_scale),
+                    handedness=primitive.handedness,
+                    frame_color=overlay.door_color,
+                    arc_color=overlay.door_arc_color,
+                )
+            )
 
     for primitive in stair_arrows:
         anchor_sx, anchor_sy = transform(primitive.anchor.x, primitive.anchor.y)
@@ -943,20 +965,95 @@ def _feature_annotations(
 
     stair_total = len(primitives["IfcStair"])
     room_total = len(primitives["IfcSpace"])
+    door_total = len(primitives["IfcDoor"])
     suffix = ""
     if (
         (overlay.stairs_enabled and stair_total > max_stair_arrows)
         or (overlay.rooms_enabled and room_total > max_room_tags)
+        or (overlay.doors_enabled and door_total > max_door_symbols)
     ):
         suffix = " (sampled)"
     if overlay.show_legend:
         legend = (
             "Feature overlay | "
             f"Stairs: {_feature_count_token(overlay.stairs_enabled, stair_total)} | "
-            f"Rooms: {_feature_count_token(overlay.rooms_enabled, room_total)}{suffix}"
+            f"Rooms: {_feature_count_token(overlay.rooms_enabled, room_total)} | "
+            f"Doors: {_feature_count_token(overlay.doors_enabled, door_total)}{suffix}"
         )
         drawing.append(_text(x + 2.0, y + 4.5, legend, 2.8, fill=overlay.legend_color))
     return drawing
+
+
+def _page_units_per_world_meter(transform) -> float:
+    """How many page units one world-meter spans after applying the view transform."""
+    x0, _ = transform(0.0, 0.0)
+    x1, _ = transform(1.0, 0.0)
+    return max(0.5, abs(x1 - x0))
+
+
+def _door_swing_symbol(
+    sx: float,
+    sy: float,
+    ux: float,
+    uy: float,
+    door_width_page: float,
+    handedness: str | None,
+    frame_color: str,
+    arc_color: str,
+) -> List[str]:
+    """Draw a planar door symbol at (sx, sy) opening in direction (ux, uy).
+
+    Symbol geometry (architectural convention):
+      - hinge at the anchor point
+      - frame: short line along the wall (perpendicular to opening)
+      - leaf: line from hinge in the opening direction, length == door width
+      - arc: quarter-circle from leaf tip back to the opposite jamb
+
+    Handedness flips the perpendicular side: "left" hinges on the left of the
+    opening direction (anchor sits on the right jamb); "right" mirrors it.
+    Falls back to a deterministic side when handedness is missing.
+    """
+    norm = math.hypot(ux, uy)
+    if norm < 1.0e-6:
+        ux, uy = 1.0, 0.0
+    else:
+        ux, uy = ux / norm, uy / norm
+    side = -1.0 if (handedness or "").strip().lower() == "right" else 1.0
+    # SVG y-down: rotate +90deg in screen space yields (-uy, ux) which lies
+    # to the left of the opening direction when looking at the page.
+    px = -uy * side
+    py = ux * side
+    hinge_x, hinge_y = sx, sy
+    jamb_x = sx + px * door_width_page
+    jamb_y = sy + py * door_width_page
+    leaf_tip_x = sx + ux * door_width_page
+    leaf_tip_y = sy + uy * door_width_page
+    # Approximate the swing as a polyline. The SVG ``A`` command is not in the
+    # subset of the SVG-to-PDF parser we ship, so a piecewise straight path
+    # keeps the output identical between SVG and PDF.
+    segments = 12
+    arc_d = [f"M {leaf_tip_x:.3f} {leaf_tip_y:.3f}"]
+    # Quarter-circle from leaf_tip back to jamb, sweeping through (ux, uy) and
+    # (px, py): each interpolated point sits on a circle of radius door_width_page
+    # centred at the hinge, parameterised by angle theta in [0, pi/2].
+    for step in range(1, segments + 1):
+        theta = (math.pi / 2.0) * (step / segments)
+        cos_t = math.cos(theta)
+        sin_t = math.sin(theta)
+        arc_x = hinge_x + (ux * cos_t + px * sin_t) * door_width_page
+        arc_y = hinge_y + (uy * cos_t + py * sin_t) * door_width_page
+        arc_d.append(f"L {arc_x:.3f} {arc_y:.3f}")
+    return [
+        # wall plane (frame) — short line along the opening
+        f'<line x1="{hinge_x:.3f}" y1="{hinge_y:.3f}" x2="{jamb_x:.3f}" y2="{jamb_y:.3f}" '
+        f'stroke="{frame_color}" stroke-width="0.18" data-feature="door-frame"/>',
+        # door leaf
+        f'<line x1="{hinge_x:.3f}" y1="{hinge_y:.3f}" x2="{leaf_tip_x:.3f}" y2="{leaf_tip_y:.3f}" '
+        f'stroke="{frame_color}" stroke-width="0.28" data-feature="door-leaf"/>',
+        # swing arc (quarter circle approximated by 12 line segments)
+        f'<path d="{" ".join(arc_d)}" fill="none" '
+        f'stroke="{arc_color}" stroke-width="0.14" stroke-dasharray="0.6 0.4" data-feature="door-arc"/>',
+    ]
 
 
 def _feature_count_token(enabled: bool, count: int) -> str:
@@ -987,6 +1084,8 @@ class _FeaturePrimitive:
         "ifc_class",
         "label",
         "display_label",
+        "width_m",
+        "handedness",
     )
 
     def __init__(
@@ -998,6 +1097,8 @@ class _FeaturePrimitive:
         ifc_class: str,
         label: str | None = None,
         display_label: str | None = None,
+        width_m: float | None = None,
+        handedness: str | None = None,
     ):
         self.anchor = anchor
         self.dir_x = dir_x
@@ -1006,6 +1107,8 @@ class _FeaturePrimitive:
         self.ifc_class = ifc_class
         self.label = label
         self.display_label = display_label
+        self.width_m = width_m
+        self.handedness = handedness
 
 
 def _collect_feature_primitives(
@@ -1013,7 +1116,7 @@ def _collect_feature_primitives(
     overlay: FeatureOverlayRule | None = None,
 ) -> Dict[str, List[_FeaturePrimitive]]:
     overlay = overlay or FeatureOverlayRule()
-    classes = ("IfcStair", "IfcSpace")
+    classes = ("IfcStair", "IfcSpace", "IfcDoor")
     grouped: Dict[str, Dict[Tuple[int, int], _FeaturePrimitive]] = {class_name: {} for class_name in classes}
     semantic_priority_length = 1000.0
 
@@ -1031,6 +1134,8 @@ def _collect_feature_primitives(
             ifc_class=class_name,
             label=anchor.label,
             display_label=anchor.display_label,
+            width_m=anchor.width_m,
+            handedness=anchor.door_handedness,
         )
         existing = grouped[class_name].get(bucket)
         if existing is None or primitive.length > existing.length:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -122,6 +123,17 @@ class IfcSerializerPlanBackend:
             self._get_local_placement,
             self.included_classes,
         )
+        # GUIDs of elements (typed by IFC class) that actually belong to each
+        # storey. ifcopenshell.draw with ``door_arcs=True`` leaks per-door
+        # geometry into every storey group regardless of containment, which
+        # makes orphan-IfcDoor/Window classification (see ``_classify_group``)
+        # paint phantom doors on slabs and roofs. The filter below drops paths
+        # whose ``ifc:guid`` is not contained in this storey.
+        self._orphan_guids_by_storey = _index_orphan_class_guids_by_storey(
+            self._model,
+            self._get_container,
+            ("IfcDoor", "IfcWindow"),
+        )
         self._storey_linework = self._build_storey_linework()
 
     def build_view(self, view: PlannedView) -> GeometrySummary:
@@ -172,6 +184,10 @@ class IfcSerializerPlanBackend:
         settings.auto_floorplan = True
         settings.include_projection = True
         settings.cells = False
+        # Let the C++ serializer draw door swing arcs: it consults IFC opening
+        # relationships and lands the symbol on the actual wall opening, which
+        # placement-only anchors cannot match generically.
+        settings.door_arcs = True
         settings.include_entities = ",".join(self.included_classes)
 
         svg_data = self._draw.main(settings, [self._model], merge_projection=False)
@@ -209,12 +225,43 @@ class IfcSerializerPlanBackend:
         projection_groups = 0
         classified_groups = 0
 
+        # Per-storey allowed GUID sets for classes the serializer leaks across
+        # storey groups (notably IfcDoor / IfcWindow under ``door_arcs=True``).
+        storey_orphan_filter = {
+            class_name: self._orphan_guids_by_storey.get(class_name, {}).get(storey_name, set())
+            for class_name in self._orphan_guids_by_storey
+        }
+        # "We indexed this class successfully" — at least one storey had a
+        # non-empty allowed set. For those classes we trust the filter even
+        # when *this* storey's allowed set is empty (means no doors here, so
+        # drop every serializer leak). Without this guard, storeys legitimately
+        # missing the class would let phantom geometry through.
+        indexed_classes = {
+            class_name
+            for class_name, by_storey in self._orphan_guids_by_storey.items()
+            if any(by_storey.values())
+        }
+
         for group in storey_group.iter():
             if group is storey_group or _local_name(group.tag) != "g":
                 continue
-            role, ifc_class = _classify_group(group.attrib.get("class", ""))
+            class_attr = group.attrib.get("class", "")
+            role, ifc_class = _classify_group(class_attr)
             if role is None:
                 continue
+
+            # Drop orphan-IfcXxx groups whose GlobalId is not contained in this
+            # storey. Without this filter ``door_arcs=True`` paints every door
+            # of the building on every storey (verified: 20 phantom doors on
+            # Foundation Level / Roof in our reference IFC).
+            if ifc_class in indexed_classes:
+                tokens = class_attr.split()
+                if "cut" not in tokens and "projection" not in tokens:
+                    guid = group.attrib.get(f"{{{IFC_NS}}}guid", "")
+                    allowed = storey_orphan_filter.get(ifc_class, set())
+                    if guid not in allowed:
+                        continue
+
             classified_groups += 1
             if role == "cut" and ifc_class:
                 cut_counts[ifc_class] = cut_counts.get(ifc_class, 0) + 1
@@ -273,6 +320,83 @@ class IfcSerializerPlanBackend:
             for point in path.points
         ]
         return VectorPath(role=path.role, points=new_points, closed=path.closed, ifc_class=path.ifc_class)
+
+
+def _index_orphan_class_guids_by_storey(
+    model,
+    get_container,
+    class_names: Iterable[str],
+) -> Dict[str, Dict[str, set]]:
+    """Return ``{ifc_class: {storey_name: {guid, ...}}}`` for filter classes.
+
+    Used to drop cross-storey leakage in the SVG output (e.g. doors that the
+    serializer paints on every storey under ``door_arcs=True``). Walks both
+    ``ContainedInStructure`` (IFC4+) and ``FillsVoids`` / wall containment
+    (IFC2x3 doors filling wall openings) so the filter works across schemas.
+    """
+    by_class: Dict[str, Dict[str, set]] = {}
+    for class_name in class_names:
+        per_storey: Dict[str, set] = {}
+        try:
+            elements = model.by_type(class_name)
+        except Exception:
+            continue
+        for element in elements:
+            storey_name = _resolve_storey_name_for_element(element, get_container)
+            if not storey_name:
+                continue
+            guid = getattr(element, "GlobalId", "") or ""
+            if not guid:
+                continue
+            per_storey.setdefault(storey_name, set()).add(guid)
+        if per_storey:
+            by_class[class_name] = per_storey
+    return by_class
+
+
+def _resolve_storey_name_for_element(element, get_container) -> Optional[str]:
+    try:
+        storey = get_container(element, ifc_class="IfcBuildingStorey")
+        if storey is not None:
+            name = getattr(storey, "Name", None)
+            if name:
+                return str(name)
+    except Exception:
+        pass
+
+    # Doors / windows in IFC2x3 typically resolve via FillsVoids -> opening -> wall -> storey.
+    seen = set()
+    stack = [element]
+    while stack:
+        current = stack.pop()
+        eid = id(current)
+        if eid in seen:
+            continue
+        seen.add(eid)
+        try:
+            if current.is_a("IfcBuildingStorey"):
+                name = getattr(current, "Name", None)
+                if name:
+                    return str(name)
+        except Exception:
+            pass
+        for relation in list(getattr(current, "ContainedInStructure", []) or []):
+            parent = getattr(relation, "RelatingStructure", None)
+            if parent is not None:
+                stack.append(parent)
+        for relation in list(getattr(current, "Decomposes", []) or []):
+            parent = getattr(relation, "RelatingObject", None)
+            if parent is not None:
+                stack.append(parent)
+        for relation in list(getattr(current, "FillsVoids", []) or []):
+            opening = getattr(relation, "RelatingOpeningElement", None)
+            if opening is not None:
+                stack.append(opening)
+        for relation in list(getattr(current, "VoidsElements", []) or []):
+            parent = getattr(relation, "RelatingBuildingElement", None)
+            if parent is not None:
+                stack.append(parent)
+    return None
 
 
 def _compute_world_xy_center(
@@ -475,14 +599,24 @@ def _classify_group(class_name: str) -> Tuple[Optional[str], Optional[str]]:
     tokens = class_name.split()
     if not tokens:
         return None, None
-    role = None
+    role: Optional[str] = None
     if "cut" in tokens:
         role = "cut"
     elif "projection" in tokens:
         role = "projection"
-    if role is None:
-        return None, None
     ifc_class = next((token for token in tokens if token.startswith("Ifc")), None)
+    if role is None:
+        # Serializer outputs door swing arcs (and window symbols) in plain
+        # ``<g class="IfcDoor">`` / ``<g class="IfcWindow">`` groups without an
+        # explicit role token. These need to be promoted to projection so the
+        # arcs reach the renderer. Other orphan groups (IfcWall / IfcColumn /
+        # IfcMember etc.) are DUPLICATES of the proper cut/projection groups
+        # the serializer also emits, so promoting them would double-draw the
+        # building. Restrict the promotion to opening elements.
+        if ifc_class in ("IfcDoor", "IfcWindow"):
+            role = "projection"
+        else:
+            return None, None
     return role, ifc_class
 
 
@@ -562,6 +696,38 @@ def _parse_svg_path(path_data: str, role: str, ifc_class: Optional[str]) -> Tupl
                 current_points.append(current_point)
             continue
 
+        if active_command in "Aa":
+            # SVG elliptical-arc-to: rx ry x-axis-rot large-arc-flag sweep-flag x y.
+            # We sample the arc into short line segments so the rest of the
+            # pipeline (transform, snapshotting, PDF output) sees only polylines.
+            for arc_index in range(0, len(params), 7):
+                if arc_index + 6 >= len(params):
+                    break
+                rx = params[arc_index]
+                ry = params[arc_index + 1]
+                phi_deg = params[arc_index + 2]
+                large_arc = int(params[arc_index + 3])
+                sweep = int(params[arc_index + 4])
+                end_x = params[arc_index + 5]
+                end_y = params[arc_index + 6]
+                if active_command == "a":
+                    end_x = current_point[0] + end_x
+                    end_y = current_point[1] + end_y
+                for sample in _sample_svg_arc(
+                    current_point[0],
+                    current_point[1],
+                    rx,
+                    ry,
+                    phi_deg,
+                    large_arc,
+                    sweep,
+                    end_x,
+                    end_y,
+                ):
+                    current_points.append(sample)
+                current_point = (end_x, end_y)
+            continue
+
         unsupported_commands.add(active_command.upper())
 
     if current_points:
@@ -576,6 +742,92 @@ def _path_point(current_point: Tuple[float, float], x: float, y: float, relative
     if relative:
         return current_point[0] + x, current_point[1] + y
     return x, y
+
+
+def _sample_svg_arc(
+    x1: float,
+    y1: float,
+    rx: float,
+    ry: float,
+    phi_deg: float,
+    large_arc: int,
+    sweep: int,
+    x2: float,
+    y2: float,
+    segments: int = 12,
+) -> List[Tuple[float, float]]:
+    """Sample an SVG elliptical-arc-to command as a list of (x, y) points.
+
+    Implements the SVG 2 endpoint-to-center conversion (Appendix B.2) and
+    samples ``segments`` points along the swept arc, excluding the start point
+    and including the end point. Degenerate inputs collapse to a single
+    end-point sample so the caller still receives the geometric endpoint.
+    """
+    if abs(x2 - x1) < 1e-12 and abs(y2 - y1) < 1e-12:
+        return []
+    rx = abs(rx)
+    ry = abs(ry)
+    if rx < 1e-12 or ry < 1e-12:
+        return [(x2, y2)]
+
+    phi = math.radians(phi_deg)
+    cos_phi = math.cos(phi)
+    sin_phi = math.sin(phi)
+
+    dx = (x1 - x2) / 2.0
+    dy = (y1 - y2) / 2.0
+    x1p = cos_phi * dx + sin_phi * dy
+    y1p = -sin_phi * dx + cos_phi * dy
+
+    lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
+    if lam > 1.0:
+        scale = math.sqrt(lam)
+        rx *= scale
+        ry *= scale
+
+    sign = -1.0 if large_arc == sweep else 1.0
+    num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p
+    den = rx * rx * y1p * y1p + ry * ry * x1p * x1p
+    if den < 1e-18:
+        return [(x2, y2)]
+    coef = sign * math.sqrt(max(0.0, num / den))
+    cxp = coef * (rx * y1p / ry)
+    cyp = -coef * (ry * x1p / rx)
+    cx = cos_phi * cxp - sin_phi * cyp + (x1 + x2) / 2.0
+    cy = sin_phi * cxp + cos_phi * cyp + (y1 + y2) / 2.0
+
+    def _angle(ux: float, uy: float, vx: float, vy: float) -> float:
+        dot = ux * vx + uy * vy
+        len_u = math.hypot(ux, uy)
+        len_v = math.hypot(vx, vy)
+        if len_u < 1e-12 or len_v < 1e-12:
+            return 0.0
+        cos_a = max(-1.0, min(1.0, dot / (len_u * len_v)))
+        angle = math.acos(cos_a)
+        if (ux * vy - uy * vx) < 0:
+            angle = -angle
+        return angle
+
+    start_vx = (x1p - cxp) / rx
+    start_vy = (y1p - cyp) / ry
+    end_vx = (-x1p - cxp) / rx
+    end_vy = (-y1p - cyp) / ry
+    theta1 = _angle(1.0, 0.0, start_vx, start_vy)
+    delta = _angle(start_vx, start_vy, end_vx, end_vy)
+    if not sweep and delta > 0:
+        delta -= 2 * math.pi
+    elif sweep and delta < 0:
+        delta += 2 * math.pi
+
+    samples: List[Tuple[float, float]] = []
+    for step in range(1, segments + 1):
+        t = theta1 + delta * (step / segments)
+        cos_t = math.cos(t)
+        sin_t = math.sin(t)
+        sx = cos_phi * rx * cos_t - sin_phi * ry * sin_t + cx
+        sy = sin_phi * rx * cos_t + cos_phi * ry * sin_t + cy
+        samples.append((sx, sy))
+    return samples
 
 
 def _finalize_path(

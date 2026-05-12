@@ -575,10 +575,19 @@ def _extract_space_semantic_label(element) -> Optional[str]:
         )
     )
     name = attr_name or prop_name
-    number = attr_number or prop_number
+    # Pick a *number* track only when it adds information. Some exporters store
+    # already-combined "Name Code" strings in properties like Reference/Tag —
+    # using those as a prefix would duplicate the name ("Lobby 101 Lobby").
+    number = None
+    for candidate in (attr_number, prop_number):
+        if not candidate:
+            continue
+        if name and name.casefold() in candidate.casefold():
+            continue
+        number = candidate
+        break
     if number and name:
-        combined = f"{number} {name}".strip()
-        return combined[:48]
+        return f"{number} {name}".strip()[:48]
     if name:
         return name[:48]
     if number:
@@ -668,7 +677,10 @@ def _value_to_text(value: object) -> Optional[str]:
     wrapped = getattr(value, "wrappedValue", None)
     if wrapped is not None:
         value = wrapped
-    text = str(value).strip()
+    text = str(value)
+    # Strip BOM / zero-width characters that some IFC exporters embed in name
+    # fields. They render as invisible glyphs on the sheet otherwise.
+    text = text.replace("﻿", "").replace("​", "").strip()
     return text if text else None
 
 
