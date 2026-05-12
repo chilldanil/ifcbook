@@ -196,6 +196,13 @@ def test_composite_backend_uses_owned_projection_when_toggle_enabled(monkeypatch
 
 def test_composite_backend_keeps_serializer_projection_when_owned_disabled(monkeypatch):
     profile = load_style_profile(None)
+    # The default profile now enables owned projection / hidden as the Phase 3C
+    # production path, so this test must explicitly disable them to verify the
+    # opt-out behaviour (serializer projection kept verbatim).
+    profile = replace(
+        profile,
+        floor_plan=replace(profile.floor_plan, own_projection=False, own_hidden=False),
+    )
     backend = CompositeGeometryBackend(
         occt=_FakeOcctBackendWithProfile(profile),
         serializer=_FakeSerializerBackend(),

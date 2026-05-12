@@ -133,13 +133,17 @@ def _patch_hidden_hlr(
     )
 
 
-def test_default_profile_owned_projection_disabled() -> None:
-    """Default profile keeps serializer projection — back-compat."""
+def test_default_profile_owns_projection_and_hidden() -> None:
+    """Default profile owns both projection and hidden linework.
+
+    Phase 3C is the active production path: serializer projection only
+    fills in where the owned OCCT path declines or fails.
+    """
     profile = load_style_profile(None)
-    assert profile.floor_plan.own_projection is False
-    assert profile.floor_plan.own_hidden is False
-    assert geometry_projection.owned_projection_enabled(profile) is False
-    assert geometry_projection.owned_hidden_enabled(profile) is False
+    assert profile.floor_plan.own_projection is True
+    assert profile.floor_plan.own_hidden is True
+    assert geometry_projection.owned_projection_enabled(profile) is True
+    assert geometry_projection.owned_hidden_enabled(profile) is True
 
 
 def test_owned_projection_toggle_respected() -> None:

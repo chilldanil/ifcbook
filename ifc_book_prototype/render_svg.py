@@ -458,16 +458,12 @@ def render_view_svg(
         ("Cut classes", _format_class_counts(geometry.cut_candidates)),
         ("Proj. classes", _format_class_counts(geometry.projection_candidates)),
     ]
-    detail = _info_lines(info_lines, start_y=205.0)
-    note_y = 257.0
-    notes = [_text(20.0, note_y, "Notes", 4.4, weight="700")]
-    for index, note in enumerate(geometry.notes, start=1):
-        notes.append(_text(20.0, note_y + index * 6.0, f"- {note}", 3.5))
+    panel = _bottom_panel(info_lines, geometry.notes, profile)
     return _wrap_sheet(
         title=view.title,
         sheet_id=view.sheet_id,
         subtitle="Real IFC-driven floor-plan linework prototype",
-        body="\n".join([drawing, detail, "\n".join(notes)]),
+        body="\n".join([drawing, panel]),
         profile=profile,
     )
 
@@ -506,16 +502,12 @@ def _render_elevation_svg(
         ("Projected lines", str((geometry.linework_counts or {}).get("PROJECTED", 0))),
         ("Proj. classes", _format_class_counts(geometry.projection_candidates)),
     ]
-    detail = _info_lines(info_lines, start_y=205.0)
-    note_y = 257.0
-    notes = [_text(20.0, note_y, "Notes", 4.4, weight="700")]
-    for index, note in enumerate(geometry.notes, start=1):
-        notes.append(_text(20.0, note_y + index * 6.0, f"- {note}", 3.5))
+    panel = _bottom_panel(info_lines, geometry.notes, profile)
     return _wrap_sheet(
         title=view.title,
         sheet_id=view.sheet_id,
         subtitle="Projected elevation linework (owned OCCT path)",
-        body="\n".join(annotation_parts + [detail, "\n".join(notes)]),
+        body="\n".join(annotation_parts + [panel]),
         profile=profile,
     )
 
@@ -553,6 +545,82 @@ def _info_lines(lines: Iterable[Tuple[str, str]], start_y: float) -> str:
         rows.append(_text(58.0, y, value, 4.0))
         y += 8.0
     return "\n".join(rows)
+
+
+# Bottom-panel layout constants. Two columns sit between the drawing region
+# (ends at y=190) and the page title block (starts at y=265 in default A4):
+#   - left column: info-lines (label / value pairs)
+#   - right column: notes (truncated/wrapped to stay above the title block)
+_BOTTOM_PANEL_TOP_Y = 198.0
+_BOTTOM_PANEL_BOTTOM_Y = 262.0
+_BOTTOM_PANEL_LEFT_X = 20.0
+_BOTTOM_PANEL_VALUE_X = 58.0
+_BOTTOM_PANEL_RIGHT_X = 110.0
+_BOTTOM_PANEL_RIGHT_END_X = 198.0
+_INFO_STEP_Y = 5.6
+_NOTE_STEP_Y = 4.2
+_NOTE_FONT_SIZE = 3.2
+_NOTE_MAX_CHARS_PER_LINE = 72
+
+
+def _bottom_panel(
+    info_lines: Iterable[Tuple[str, str]],
+    notes: Iterable[str],
+    profile: StyleProfile,
+) -> str:
+    """Render the info + notes panel under a plan/elevation drawing.
+
+    Both columns are clipped at ``_BOTTOM_PANEL_BOTTOM_Y`` so neither bleeds
+    into the title block, regardless of input length. Overflowing notes get
+    a single "+N more" tail entry so the reader knows information was elided.
+    """
+    info_lines = list(info_lines)
+    notes = list(notes)
+    rows: List[str] = [_text(_BOTTOM_PANEL_LEFT_X, _BOTTOM_PANEL_TOP_Y - 3.5, "Sheet info", 3.6, weight="700", fill="#334155")]
+    y = _BOTTOM_PANEL_TOP_Y
+    for label, value in info_lines:
+        if y > _BOTTOM_PANEL_BOTTOM_Y:
+            break
+        rows.append(_text(_BOTTOM_PANEL_LEFT_X, y, label, 3.4, weight="700"))
+        rows.append(_text(_BOTTOM_PANEL_VALUE_X, y, _truncate(value, 40), 3.4))
+        y += _INFO_STEP_Y
+
+    rows.append(_text(_BOTTOM_PANEL_RIGHT_X, _BOTTOM_PANEL_TOP_Y - 3.5, "Notes", 3.6, weight="700", fill="#334155"))
+    note_y = _BOTTOM_PANEL_TOP_Y
+    wrapped: List[str] = []
+    for note in notes:
+        wrapped.extend(_wrap_note(str(note), _NOTE_MAX_CHARS_PER_LINE))
+    available = max(0, int((_BOTTOM_PANEL_BOTTOM_Y - note_y) / _NOTE_STEP_Y))
+    if len(wrapped) > available and available > 0:
+        kept = wrapped[: available - 1]
+        omitted = len(wrapped) - len(kept)
+        kept.append(f"+ {omitted} more")
+        wrapped = kept
+    for line in wrapped:
+        if note_y > _BOTTOM_PANEL_BOTTOM_Y:
+            break
+        rows.append(_text(_BOTTOM_PANEL_RIGHT_X, note_y, line, _NOTE_FONT_SIZE))
+        note_y += _NOTE_STEP_Y
+    return "\n".join(rows)
+
+
+def _wrap_note(text: str, max_chars: int) -> List[str]:
+    text = text.strip()
+    if not text:
+        return []
+    prefix = "- "
+    body = text
+    lines: List[str] = []
+    while body:
+        chunk = body[: max_chars - len(prefix)]
+        if len(body) > len(chunk):
+            split = chunk.rfind(" ")
+            if split > max_chars // 2:
+                chunk = chunk[:split]
+        lines.append(prefix + chunk.rstrip())
+        body = body[len(chunk):].lstrip()
+        prefix = "  "
+    return lines
 
 
 def _plan_drawing(geometry: GeometrySummary, profile: StyleProfile, x: float, y: float, width: float, height: float) -> str:

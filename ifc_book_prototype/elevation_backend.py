@@ -111,6 +111,14 @@ class ElevationBackend:
     _tri_available: bool = field(init=False, default=False)   # triangulation ready
 
     def __post_init__(self) -> None:
+        # Set the backend identity from OCCT availability up-front so that the
+        # name stays meaningful even when later setup steps fail (e.g. missing
+        # or unreadable IFC). build_view must remain deterministic regardless.
+        if occt_section.OCCT_AVAILABLE:
+            self.name = "occt-elevation-edges"
+        else:
+            self.name = "tri-elevation-edges"
+
         # Phase 1: open the IFC file with ifcopenshell (required for both paths).
         try:
             import ifcopenshell  # type: ignore
@@ -136,18 +144,21 @@ class ElevationBackend:
             self._elements = flat
 
             tri_settings = ifcopenshell.geom.settings()
-            tri_settings.set(tri_settings.USE_WORLD_COORDS, True)
+            try:
+                # ifcopenshell >= 0.8: string-keyed settings API.
+                tri_settings.set("use-world-coords", True)
+            except Exception:
+                # Pre-0.8 API exposed attribute constants.
+                tri_settings.set(tri_settings.USE_WORLD_COORDS, True)
             self._tri_settings = tri_settings
             self._tri_available = True
         except Exception:
             return
 
-        # Phase 2: upgrade to OCCT if available.
+        # Phase 2: upgrade to OCCT if available. (Name was set up-front in
+        # __post_init__ from OCCT availability.)
         if occt_section.OCCT_AVAILABLE:
             self._available = True
-            self.name = "occt-elevation-edges"
-        else:
-            self.name = "tri-elevation-edges"
 
     # ------------------------------------------------------------------
     def build_view(self, view: PlannedView) -> GeometrySummary:

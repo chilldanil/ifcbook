@@ -27,29 +27,30 @@
 <rect x="194.200" y="107.380" width="4.000" height="11.240" fill="#faf8f2" transform="rotate(-90 196.200 113.000)"/>
 <text x="196.200" y="113.000" font-size="2.8" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#1e3a5f" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 196.200 113.000)">6.00 m</text>
 <text x="22.0" y="185.0" font-size="2.7" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#475569">world extents 8.00m x 6.00m</text>
-<text x="20.0" y="205.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey</text>
-<text x="58.0" y="205.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">L1</text>
-<text x="20.0" y="213.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey elev. (m)</text>
-<text x="58.0" y="213.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0.00</text>
-<text x="20.0" y="221.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut plane (m)</text>
-<text x="58.0" y="221.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1.10</text>
-<text x="20.0" y="229.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Geometry backend</text>
-<text x="58.0" y="229.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">composite-occt+serializer</text>
-<text x="20.0" y="237.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Source elements</text>
-<text x="58.0" y="237.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">3</text>
-<text x="20.0" y="245.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Line paths</text>
-<text x="58.0" y="245.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
-<text x="20.0" y="253.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Stair arrows</text>
-<text x="58.0" y="253.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
-<text x="20.0" y="261.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Room tags</text>
-<text x="58.0" y="261.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1</text>
-<text x="20.0" y="269.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut classes</text>
-<text x="58.0" y="269.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
-<text x="20.0" y="277.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Proj. classes</text>
-<text x="58.0" y="277.0" font-size="4.0" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
-<text x="20.0" y="257.0" font-size="4.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Notes</text>
-<text x="20.0" y="263.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Projection source: owned (serializer projection suppressed).</text>
-<text x="20.0" y="269.0" font-size="3.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Owned projection output: 1 projected line(s), 1 hidden line(s).</text>
+<text x="20.0" y="194.5" font-size="3.6" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#334155">Sheet info</text>
+<text x="20.0" y="198.0" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey</text>
+<text x="58.0" y="198.0" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">L1</text>
+<text x="20.0" y="203.6" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Storey elev. (m)</text>
+<text x="58.0" y="203.6" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0.00</text>
+<text x="20.0" y="209.2" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut plane (m)</text>
+<text x="58.0" y="209.2" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1.10</text>
+<text x="20.0" y="214.79999999999998" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Geometry backend</text>
+<text x="58.0" y="214.79999999999998" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">composite-occt+serializer</text>
+<text x="20.0" y="220.39999999999998" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Source elements</text>
+<text x="58.0" y="220.39999999999998" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">3</text>
+<text x="20.0" y="225.99999999999997" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Line paths</text>
+<text x="58.0" y="225.99999999999997" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
+<text x="20.0" y="231.59999999999997" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Stair arrows</text>
+<text x="58.0" y="231.59999999999997" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">0</text>
+<text x="20.0" y="237.19999999999996" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Room tags</text>
+<text x="58.0" y="237.19999999999996" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">1</text>
+<text x="20.0" y="242.79999999999995" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Cut classes</text>
+<text x="58.0" y="242.79999999999995" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
+<text x="20.0" y="248.39999999999995" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">Proj. classes</text>
+<text x="58.0" y="248.39999999999995" font-size="3.4" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Wall:1</text>
+<text x="110.0" y="194.5" font-size="3.6" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#334155">Notes</text>
+<text x="110.0" y="198.0" font-size="3.2" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Projection source: owned (serializer projection suppressed).</text>
+<text x="110.0" y="202.2" font-size="3.2" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">- Owned projection output: 1 projected line(s), 1 hidden line(s).</text>
   <text x="16.0" y="272.0" font-size="6.0" font-family="Helvetica, Arial, sans-serif" font-weight="700" fill="#0f172a">A-101</text>
   <text x="40.0" y="272.0" font-size="4.5" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">Floor Plan - L1</text>
   <text x="166.0" y="272.0" font-size="3.8" font-family="Helvetica, Arial, sans-serif" font-weight="400" fill="#0f172a">din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden</text>

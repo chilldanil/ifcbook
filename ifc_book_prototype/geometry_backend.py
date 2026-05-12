@@ -92,10 +92,12 @@ class IfcSerializerPlanBackend:
         import ifcopenshell.draw  # type: ignore
         from ifcopenshell.util.element import get_container  # type: ignore
         from ifcopenshell.util.unit import calculate_unit_scale  # type: ignore
+        from ifcopenshell.util.placement import get_local_placement  # type: ignore
 
         self._ifcopenshell = ifcopenshell
         self._draw = ifcopenshell.draw
         self._get_container = get_container
+        self._get_local_placement = get_local_placement
         self._model = ifcopenshell.open(str(self.ifc_path))
         self._unit_scale = float(calculate_unit_scale(self._model))
         self._storey_elevations = build_storey_elevations(self._model, self._unit_scale)
@@ -108,6 +110,17 @@ class IfcSerializerPlanBackend:
             self._model,
             self._unit_scale,
             self._get_container,
+        )
+        # Serializer settings frozen at the same values used in _build_storey_linework
+        # so transform inverse stays consistent.
+        self._page_width_mm = 297.0
+        self._page_height_mm = 420.0
+        self._serializer_scale = 1.0 / 100.0
+        self._world_center = _compute_world_xy_center(
+            self._model,
+            self._unit_scale,
+            self._get_local_placement,
+            self.included_classes,
         )
         self._storey_linework = self._build_storey_linework()
 
@@ -217,6 +230,9 @@ class IfcSerializerPlanBackend:
                 paths.extend(parsed_paths)
                 unsupported_commands.update(path_commands)
 
+        # Serializer outputs paths in page-mm (auto-centered on the page rect).
+        # Convert to world-meters so paths and feature anchors share a frame.
+        paths = [self._path_to_world_meters(path) for path in paths]
         paths.sort(key=_path_sort_key)
         notes = [
             f"IfcOpenShell SVG floorplan serializer extracted {len(paths)} line path(s) for {storey_name}.",
@@ -241,6 +257,66 @@ class IfcSerializerPlanBackend:
             classified_groups=classified_groups,
             notes=notes,
         )
+
+    def _path_to_world_meters(self, path: VectorPath) -> VectorPath:
+        page_cx = self._page_width_mm / 2.0
+        page_cy = self._page_height_mm / 2.0
+        # 1 page-mm = 1 / (scale * 1000) world-meters. Y is flipped because SVG
+        # page coordinates grow downward while world Y grows upward.
+        meters_per_page_mm = 1.0 / (self._serializer_scale * 1000.0)
+        world_cx, world_cy = self._world_center
+        new_points = [
+            Point2D(
+                x=round((point.x - page_cx) * meters_per_page_mm + world_cx, 4),
+                y=round((page_cy - point.y) * meters_per_page_mm + world_cy, 4),
+            )
+            for point in path.points
+        ]
+        return VectorPath(role=path.role, points=new_points, closed=path.closed, ifc_class=path.ifc_class)
+
+
+def _compute_world_xy_center(
+    model,
+    unit_scale: float,
+    get_local_placement,
+    classes: Iterable[str],
+) -> Tuple[float, float]:
+    """Global XY bbox center (in meters) over element placements.
+
+    Skips identity placements so origin-only elements (typically IfcSpace
+    / IfcStair / their decomposition parents) do not bias the center.
+    Falls back to (0, 0) when no element provides a meaningful translation.
+    """
+    seen = set()
+    queue = [c for c in classes]
+    queue.extend(["IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", "IfcMember"])
+    xs: List[float] = []
+    ys: List[float] = []
+    for class_name in queue:
+        if class_name in seen:
+            continue
+        seen.add(class_name)
+        try:
+            elements = model.by_type(class_name)
+        except Exception:
+            continue
+        for element in elements:
+            placement = getattr(element, "ObjectPlacement", None)
+            if placement is None:
+                continue
+            try:
+                matrix = get_local_placement(placement)
+                tx = float(matrix[0][3]) * unit_scale
+                ty = float(matrix[1][3]) * unit_scale
+            except Exception:
+                continue
+            if abs(tx) < 1e-9 and abs(ty) < 1e-9:
+                continue
+            xs.append(tx)
+            ys.append(ty)
+    if not xs or not ys:
+        return 0.0, 0.0
+    return (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
 
 
 @dataclass

@@ -29,3 +29,6 @@ ifc-book-benchmark = "ifc_book_prototype.benchmark:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["ifc_book_prototype*"]

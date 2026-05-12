@@ -21,13 +21,20 @@ def build_feature_anchors_by_storey(
     except Exception:
         return {}
 
+    geom_settings = _build_world_geom_settings()
+
     by_storey: Dict[str, List[FeatureAnchor2D]] = {}
     for class_name in feature_classes:
         for element in model.by_type(class_name):
             storey_name = _resolve_storey_name(element, get_container)
             if not storey_name:
                 continue
-            anchor_data = _extract_anchor_xy(element, unit_scale, get_local_placement)
+            anchor_data = _extract_anchor_xy(
+                element,
+                unit_scale,
+                get_local_placement,
+                geom_settings=geom_settings,
+            )
             if anchor_data is None:
                 continue
             anchor_x, anchor_y, matrix = anchor_data
@@ -125,29 +132,137 @@ def _resolve_storey_name(element, get_container) -> str:
     return ""
 
 
-def _extract_anchor_xy(element, unit_scale: float, get_local_placement) -> Optional[Tuple[float, float, object]]:
+def _extract_anchor_xy(
+    element,
+    unit_scale: float,
+    get_local_placement,
+    geom_settings=None,
+) -> Optional[Tuple[float, float, object]]:
     placement = getattr(element, "ObjectPlacement", None)
-    if placement is None:
+    matrix = None
+    placement_x: Optional[float] = None
+    placement_y: Optional[float] = None
+
+    if placement is not None:
+        try:
+            matrix = get_local_placement(placement)
+            placement_x = float(matrix[0][3]) * unit_scale
+            placement_y = float(matrix[1][3]) * unit_scale
+        except Exception:
+            matrix = None
+
+        if placement_x is None:
+            try:
+                relative = getattr(placement, "RelativePlacement", None)
+                location = getattr(relative, "Location", None)
+                coordinates = list(getattr(location, "Coordinates", []) or [])
+                if len(coordinates) >= 2:
+                    placement_x = float(coordinates[0]) * unit_scale
+                    placement_y = float(coordinates[1]) * unit_scale
+            except Exception:
+                pass
+
+    # Many IFCs leave ObjectPlacement at origin and locate the element via its
+    # Representation (e.g. IfcSpace) or via decomposition children (e.g. IfcStair).
+    # Fall back to a representation/decomposition centroid in those cases.
+    if placement_x is None or _is_origin(placement_x, placement_y):
+        centroid = _representation_centroid(element, unit_scale, geom_settings, get_local_placement)
+        if centroid is not None:
+            cx, cy = centroid
+            return cx, cy, matrix
+
+    if placement_x is not None:
+        return placement_x, placement_y, matrix
+    return None
+
+
+def _is_origin(x: Optional[float], y: Optional[float], tol: float = 1e-9) -> bool:
+    if x is None or y is None:
+        return False
+    return abs(x) < tol and abs(y) < tol
+
+
+def _build_world_geom_settings():
+    try:
+        import ifcopenshell.geom  # type: ignore
+    except Exception:
         return None
     try:
-        matrix = get_local_placement(placement)
-        x = float(matrix[0][3]) * unit_scale
-        y = float(matrix[1][3]) * unit_scale
-        return x, y, matrix
+        settings = ifcopenshell.geom.settings()
+        settings.set("use-world-coords", True)
+        return settings
     except Exception:
-        pass
+        return None
 
+
+def _representation_centroid(
+    element,
+    unit_scale: float,
+    geom_settings,
+    get_local_placement,
+) -> Optional[Tuple[float, float]]:
+    """World-meter XY centroid derived from geometry, with decomposition fallback."""
+
+    # First try: aggregate child placements (cheap, no geometry build).
+    # Useful for IfcStair / IfcRoof / containers whose own placement is identity
+    # but whose decomposed children carry the real positions.
+    child_centroid = _decomposition_centroid(element, unit_scale, get_local_placement)
+    if child_centroid is not None:
+        return child_centroid
+
+    # Second try: build the shape with world-coords applied, then average verts.
+    # Handles IfcSpace where the boundary lives in the swept profile.
+    if geom_settings is None:
+        return None
     try:
-        relative = getattr(placement, "RelativePlacement", None)
-        location = getattr(relative, "Location", None)
-        coordinates = list(getattr(location, "Coordinates", []) or [])
-        if len(coordinates) >= 2:
-            x = float(coordinates[0]) * unit_scale
-            y = float(coordinates[1]) * unit_scale
-            return x, y, None
+        import ifcopenshell.geom  # type: ignore
+        shape = ifcopenshell.geom.create_shape(geom_settings, element)
     except Exception:
-        pass
-    return None
+        return None
+    if shape is None:
+        return None
+    try:
+        verts = shape.geometry.verts
+    except Exception:
+        return None
+    if not verts or len(verts) < 3:
+        return None
+    count = len(verts) // 3
+    if count <= 0:
+        return None
+    sum_x = 0.0
+    sum_y = 0.0
+    for i in range(count):
+        sum_x += float(verts[i * 3])
+        sum_y += float(verts[i * 3 + 1])
+    return (sum_x / count) * unit_scale, (sum_y / count) * unit_scale
+
+
+def _decomposition_centroid(
+    element,
+    unit_scale: float,
+    get_local_placement,
+) -> Optional[Tuple[float, float]]:
+    xs: List[float] = []
+    ys: List[float] = []
+    for relation in list(getattr(element, "IsDecomposedBy", []) or []):
+        for child in list(getattr(relation, "RelatedObjects", []) or []):
+            placement = getattr(child, "ObjectPlacement", None)
+            if placement is None:
+                continue
+            try:
+                matrix = get_local_placement(placement)
+                cx = float(matrix[0][3]) * unit_scale
+                cy = float(matrix[1][3]) * unit_scale
+            except Exception:
+                continue
+            if _is_origin(cx, cy):
+                continue
+            xs.append(cx)
+            ys.append(cy)
+    if not xs or not ys:
+        return None
+    return sum(xs) / len(xs), sum(ys) / len(ys)
 
 
 def _extract_direction_xy(matrix: object) -> Tuple[float, float]:

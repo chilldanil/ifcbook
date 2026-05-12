@@ -7,7 +7,11 @@ from .domain import FeatureOverlayRule, FloorPlanRule, PageSpec, StyleProfile
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-DEFAULT_PROFILE_PATH = PACKAGE_ROOT / "profiles" / "din_iso_arch_floor_plan_v1.json"
+DEFAULT_PROFILE_PATH = (
+    PACKAGE_ROOT
+    / "profiles"
+    / "din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden.json"
+)
 
 
 def load_style_profile(profile_path: str | None = None) -> StyleProfile:
