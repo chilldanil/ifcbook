@@ -2,9 +2,9 @@
 
 This is a runnable prototype scaffold for the MVP slice defined in the research report:
 
-Current implementation snapshot and roadmap: [PROJECT_STATUS.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PROJECT_STATUS.md)
-Next implementation phases: [NEXT_FEATURE_PLAN.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/NEXT_FEATURE_PLAN.md)
-Phase 3A validation record: [PHASE3A_VALIDATION.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PHASE3A_VALIDATION.md)
+Current implementation snapshot and roadmap: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)
+Next implementation phases: [docs/NEXT_FEATURE_PLAN.md](docs/NEXT_FEATURE_PLAN.md)
+Phase 3A validation record: [docs/PHASE3A_VALIDATION.md](docs/PHASE3A_VALIDATION.md)
 
 - IFC ingest
 - preflight and normalization

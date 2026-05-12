@@ -3,7 +3,7 @@
 Snapshot date: 2026-04-23
 
 This note marks the current implementation state of the IFC-to-drawing-book prototype, what already exists in the repo, and what the next execution targets should be.
-Phase 3A measured validation details are tracked in [PHASE3A_VALIDATION.md](/Users/daniilchilochi/Downloads/ifc_to_blueprint/ifc%20blue/PHASE3A_VALIDATION.md).
+Phase 3A measured validation details are tracked in [PHASE3A_VALIDATION.md](PHASE3A_VALIDATION.md).
 
 ## Where We Are Now
 

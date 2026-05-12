@@ -31,7 +31,7 @@ Current implementation status:
 
 The path remains opt-in because hidden quality and de-dup need further tuning.
 
-Roadmap (tracked in NEXT_FEATURE_PLAN.md Phase 3C):
+Roadmap (tracked in docs/NEXT_FEATURE_PLAN.md Phase 3C):
 
   - step 4: de-duplication across adjacent elements (two walls sharing an
     edge should emit it once) via content-hash reduction on the quantized
