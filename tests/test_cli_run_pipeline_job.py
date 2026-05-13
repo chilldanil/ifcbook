@@ -25,6 +25,17 @@ def test_run_pipeline_job_rejects_ifc_and_bundle_together(tmp_path: Path):
         )
 
 
+def test_run_pipeline_job_rejects_linework_rerender_without_bundle(tmp_path: Path):
+    ifc_path = tmp_path / "model.ifc"
+    ifc_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="--bundle-rerender-linework requires --bundle."):
+        cli.run_pipeline_job(
+            output_dir=tmp_path / "out",
+            ifc_path=ifc_path,
+            bundle_rerender_linework=True,
+        )
+
+
 def test_run_pipeline_job_dispatches_to_pipeline(monkeypatch, tmp_path: Path):
     ifc_path = tmp_path / "model.ifc"
     out_dir = tmp_path / "out"
@@ -78,10 +89,11 @@ def test_run_pipeline_job_dispatches_to_bundle_replay(monkeypatch, tmp_path: Pat
         calls["profile_path"] = profile_path
         return profile_marker
 
-    def _fake_replay_bundle(*, bundle_dir: Path, output_dir: Path, profile):
+    def _fake_replay_bundle(*, bundle_dir: Path, output_dir: Path, profile, rerender_linework: bool):
         calls["bundle_dir"] = bundle_dir
         calls["output_dir"] = output_dir
         calls["profile"] = profile
+        calls["rerender_linework"] = rerender_linework
         return manifest_marker
 
     monkeypatch.setattr(cli, "load_style_profile", _fake_load_style_profile)
@@ -91,6 +103,7 @@ def test_run_pipeline_job_dispatches_to_bundle_replay(monkeypatch, tmp_path: Pat
         output_dir=out_dir,
         profile_path=None,
         bundle_dir=bundle_dir,
+        bundle_rerender_linework=True,
     )
 
     assert manifest is manifest_marker
@@ -99,5 +112,5 @@ def test_run_pipeline_job_dispatches_to_bundle_replay(monkeypatch, tmp_path: Pat
         "bundle_dir": bundle_dir,
         "output_dir": out_dir,
         "profile": profile_marker,
+        "rerender_linework": True,
     }
-

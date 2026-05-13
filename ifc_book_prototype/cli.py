@@ -29,6 +29,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile", help="Path to a JSON style profile")
     parser.add_argument("--bundle", help="Path to an existing generated bundle to replay without reopening the IFC")
     parser.add_argument(
+        "--bundle-rerender-linework",
+        action="store_true",
+        help=(
+            "With --bundle, regenerate view sheets from metadata/view_linework.json "
+            "instead of copying cached SVGs. Falls back to copy replay for legacy bundles."
+        ),
+    )
+    parser.add_argument(
         "--summarize-runtime",
         metavar="RUN_DIR",
         help=(
@@ -135,6 +143,7 @@ def run_pipeline_job(
     profile_path: str | None = None,
     ifc_path: Path | None = None,
     bundle_dir: Path | None = None,
+    bundle_rerender_linework: bool = False,
 ) -> PipelineManifest:
     profile = load_style_profile(profile_path)
     if bundle_dir is not None:
@@ -142,10 +151,17 @@ def run_pipeline_job(
             raise ValueError("Specify either an IFC path or --bundle, not both.")
         if not bundle_dir.exists():
             raise FileNotFoundError(f"Bundle directory does not exist: {bundle_dir}")
-        return replay_bundle(bundle_dir=bundle_dir, output_dir=output_dir, profile=profile)
+        return replay_bundle(
+            bundle_dir=bundle_dir,
+            output_dir=output_dir,
+            profile=profile,
+            rerender_linework=bundle_rerender_linework,
+        )
 
     if ifc_path is None:
         raise ValueError("Either an IFC path or --bundle is required.")
+    if bundle_rerender_linework:
+        raise ValueError("--bundle-rerender-linework requires --bundle.")
     if not ifc_path.exists():
         raise FileNotFoundError(f"Input IFC does not exist: {ifc_path}")
     return PrototypePipeline(profile).run(ifc_path=ifc_path, output_dir=output_dir)
@@ -233,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
             profile_path=args.profile,
             ifc_path=ifc_path,
             bundle_dir=bundle_dir,
+            bundle_rerender_linework=args.bundle_rerender_linework,
         )
     except (ValueError, FileNotFoundError) as exc:
         parser.error(str(exc))
