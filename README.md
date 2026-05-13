@@ -137,6 +137,32 @@ For large professional models where you already have a generated artifact bundle
 python -m ifc_book_prototype --bundle out/demo --out out/demo_replayed
 ```
 
+To rerender cached typed linework with a different built-in office preset, without reopening the IFC:
+
+```bash
+python -m ifc_book_prototype.cli --list-profiles
+python -m ifc_book_prototype.cli \
+  --bundle out/demo \
+  --out out/demo_presentation \
+  --bundle-rerender-linework \
+  --profile presentation
+```
+
+Built-in rerender presets currently include `presentation`, `permit_set`, and `coordination`.
+`--profile` still accepts a direct JSON path when a custom office standard is needed.
+
+To generate a machine-readable proof that the same cached geometry produces different drawings under different profiles:
+
+```bash
+python -m ifc_book_prototype.cli \
+  --compare-profiles out/demo \
+  --profiles presentation,permit_set,coordination \
+  --compare-sheet A-102 \
+  --out out/profile_compare
+```
+
+This writes `profile_comparison.json` and `profile_comparison.md` with the shared geometry hash plus per-profile SVG/PDF hashes.
+
 If `ifcopenshell` is available, the prototype will use it for metadata enrichment and real floor-plan extraction. Otherwise it falls back to SPF scanning only.
 
 The `samples/` directory is intended for local test IFCs and is gitignored by default.

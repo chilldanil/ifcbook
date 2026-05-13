@@ -7,7 +7,13 @@ from pathlib import Path
 from .bundle_replay import replay_bundle
 from .domain import PipelineManifest
 from .pipeline import PrototypePipeline
-from .profiles import load_style_profile
+from .profiles import available_profile_presets, load_style_profile, resolve_style_profile_path
+from .profile_compare import (
+    compare_profile_rerenders,
+    format_profile_comparison_human,
+    parse_profile_list,
+    write_profile_comparison_report,
+)
 from .progress_plan import (
     create_progress_plan_from_run_root,
     format_progress_plan_human,
@@ -26,7 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prototype IFC drawing-book pipeline")
     parser.add_argument("ifc_path", nargs="?", help="Path to the input IFC SPF file")
     parser.add_argument("--out", help="Output directory for generated artifacts")
-    parser.add_argument("--profile", help="Path to a JSON style profile")
+    parser.add_argument("--profile", help="Path to a JSON style profile, or a built-in preset name")
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="List built-in style profile preset names and exit.",
+    )
     parser.add_argument("--bundle", help="Path to an existing generated bundle to replay without reopening the IFC")
     parser.add_argument(
         "--bundle-rerender-linework",
@@ -35,6 +46,22 @@ def build_parser() -> argparse.ArgumentParser:
             "With --bundle, regenerate view sheets from metadata/view_linework.json "
             "instead of copying cached SVGs. Falls back to copy replay for legacy bundles."
         ),
+    )
+    parser.add_argument(
+        "--compare-profiles",
+        metavar="BUNDLE_DIR",
+        help=(
+            "Rerender one bundle with several style profiles and compare geometry/SVG/PDF "
+            "hashes. Requires --out."
+        ),
+    )
+    parser.add_argument(
+        "--profiles",
+        help="Comma-separated profile presets/paths for --compare-profiles. Defaults to presentation,permit_set,coordination.",
+    )
+    parser.add_argument(
+        "--compare-sheet",
+        help="Optional sheet id to compare for --compare-profiles, e.g. A-102. Defaults to the first view sheet.",
     )
     parser.add_argument(
         "--summarize-runtime",
@@ -177,6 +204,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--plan-next-json-out requires --plan-next.")
     if args.plan_next_svg_out and not args.plan_next:
         parser.error("--plan-next-svg-out requires --plan-next.")
+    if args.profiles and not args.compare_profiles:
+        parser.error("--profiles requires --compare-profiles.")
+    if args.compare_sheet and not args.compare_profiles:
+        parser.error("--compare-sheet requires --compare-profiles.")
+
+    if args.list_profiles:
+        print("PROFILE_PRESETS")
+        for name, path in available_profile_presets().items():
+            profile = load_style_profile(name)
+            print(f"{name}\t{profile.profile_id}\t{resolve_style_profile_path(name)}")
+        return 0
 
     if args.summarize_runtime:
         return _summarize_runtime(Path(args.summarize_runtime))
@@ -235,9 +273,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"plan_next_svg={plan_svg_path}")
         return 0
 
+    if args.compare_profiles:
+        if not args.out:
+            parser.error("--out is required with --compare-profiles.")
+        try:
+            report = compare_profile_rerenders(
+                bundle_dir=Path(args.compare_profiles),
+                output_root=Path(args.out),
+                profiles=parse_profile_list(args.profiles),
+                sheet_id=args.compare_sheet,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        json_path, markdown_path = write_profile_comparison_report(report)
+        print(format_profile_comparison_human(report))
+        print(f"profile_comparison_json={json_path}")
+        print(f"profile_comparison_markdown={markdown_path}")
+        return 0
+
     if not args.out:
         parser.error(
-            "--out is required unless --summarize-runtime, --runtime-gate, or --plan-next is used."
+            "--out is required unless --summarize-runtime, --runtime-gate, --plan-next, or --compare-profiles is used."
         )
 
     output_dir = Path(args.out)

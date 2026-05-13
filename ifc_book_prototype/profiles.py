@@ -13,9 +13,27 @@ DEFAULT_PROFILE_PATH = (
     / "din_iso_arch_floor_plan_v3_phase3c_owned_projection_hidden.json"
 )
 
+PROFILE_PRESETS = {
+    "default": DEFAULT_PROFILE_PATH,
+    "din_iso": DEFAULT_PROFILE_PATH,
+    "presentation": PACKAGE_ROOT / "profiles" / "office_presentation_rerender_v1.json",
+    "permit_set": PACKAGE_ROOT / "profiles" / "office_permit_set_rerender_v1.json",
+    "coordination": PACKAGE_ROOT / "profiles" / "office_coordination_rerender_v1.json",
+}
+
+
+def available_profile_presets() -> dict[str, Path]:
+    return dict(sorted(PROFILE_PRESETS.items()))
+
+
+def resolve_style_profile_path(profile_path: str | None = None) -> Path:
+    if profile_path is None:
+        return DEFAULT_PROFILE_PATH
+    return PROFILE_PRESETS.get(profile_path, Path(profile_path))
+
 
 def load_style_profile(profile_path: str | None = None) -> StyleProfile:
-    path = Path(profile_path) if profile_path else DEFAULT_PROFILE_PATH
+    path = resolve_style_profile_path(profile_path)
     raw = json.loads(path.read_text(encoding="utf-8"))
     page = PageSpec(**raw["page"])
     floor_plan_raw = dict(raw["floor_plan"])

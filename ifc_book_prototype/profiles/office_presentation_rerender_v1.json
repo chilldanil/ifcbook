@@ -1,0 +1,63 @@
+{
+  "profile_id": "office_presentation_rerender_v1",
+  "region": "Office preset",
+  "page": {
+    "width_mm": 210.0,
+    "height_mm": 297.0,
+    "margin_mm": 12.0,
+    "title_block_height_mm": 20.0
+  },
+  "lineweights_mm": {
+    "cut_primary": 0.28,
+    "cut_secondary": 0.2,
+    "projected": 0.13,
+    "overhead": 0.1
+  },
+  "floor_plan": {
+    "cut_plane_m": 1.1,
+    "view_depth_below_m": 0.2,
+    "overhead_depth_above_m": 2.3,
+    "include_classes": [
+      "IfcWall",
+      "IfcSlab",
+      "IfcColumn",
+      "IfcBeam",
+      "IfcMember",
+      "IfcDoor",
+      "IfcWindow",
+      "IfcStair"
+    ],
+    "cut_classes": ["IfcWall", "IfcSlab", "IfcColumn", "IfcBeam", "IfcMember"],
+    "occt_per_element_budget_s": 2.0,
+    "cut_chord_tolerance_m": 0.0005,
+    "highlight_fallback_lines": false,
+    "own_projection": true,
+    "own_hidden": true,
+    "feature_overlay": {
+      "enabled": true,
+      "show_legend": true,
+      "leader_enabled": true,
+      "stairs_enabled": true,
+      "rooms_enabled": true,
+      "doors_enabled": false,
+      "max_stair_arrows": 60,
+      "max_room_tags": 80,
+      "stair_color": "#2563eb",
+      "room_fill_color": "#eff6ff",
+      "room_stroke_color": "#2563eb",
+      "room_text_color": "#1d4ed8",
+      "legend_color": "#1e3a8a",
+      "leader_color": "#93c5fd",
+      "leader_stroke_width": 0.14,
+      "leader_dasharray": "0.8 0.8",
+      "stair_label": "UP",
+      "room_label_mode": "ifc_name",
+      "room_label_prefix": "R",
+      "room_label_start": 1,
+      "room_fixed_label": "ROOM"
+    }
+  },
+  "sheet_prefix": "A",
+  "cover_sheet_id": "A-000",
+  "index_sheet_id": "A-001"
+}

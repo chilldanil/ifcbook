@@ -1125,12 +1125,14 @@ def _collect_feature_primitives(
     classes = ("IfcStair", "IfcSpace", "IfcDoor")
     grouped: Dict[str, Dict[Tuple[int, int], _FeaturePrimitive]] = {class_name: {} for class_name in classes}
     semantic_priority_length = 1000.0
+    semantic_classes: set[str] = set()
 
     # Prefer IFC-semantic anchors when available (real element placements).
     for anchor in geometry.feature_anchors:
         class_name = anchor.ifc_class
         if class_name not in grouped:
             continue
+        semantic_classes.add(class_name)
         bucket = _feature_bucket(anchor.anchor.x, anchor.anchor.y)
         primitive = _FeaturePrimitive(
             anchor=Point2D(x=round(anchor.anchor.x, 4), y=round(anchor.anchor.y, 4)),
@@ -1150,6 +1152,8 @@ def _collect_feature_primitives(
     # Fallback/augmentation from geometry-derived class paths when anchors are missing.
     for class_name, points in _iter_class_points(geometry):
         if class_name not in grouped or len(points) < 2:
+            continue
+        if class_name in semantic_classes:
             continue
         dir_x, dir_y, length = _infer_direction(points)
         if length <= 1.0e-9:

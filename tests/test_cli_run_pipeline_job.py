@@ -12,6 +12,17 @@ def test_run_pipeline_job_requires_ifc_or_bundle(tmp_path: Path):
         cli.run_pipeline_job(output_dir=tmp_path / "out")
 
 
+def test_cli_list_profiles_prints_builtin_presets(capsys):
+    exit_code = cli.main(["--list-profiles"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "PROFILE_PRESETS" in out
+    assert "presentation\toffice_presentation_rerender_v1" in out
+    assert "permit_set\toffice_permit_set_rerender_v1" in out
+    assert "coordination\toffice_coordination_rerender_v1" in out
+
+
 def test_run_pipeline_job_rejects_ifc_and_bundle_together(tmp_path: Path):
     ifc_path = tmp_path / "model.ifc"
     bundle_dir = tmp_path / "bundle"

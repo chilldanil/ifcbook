@@ -193,6 +193,48 @@ def test_semantic_feature_anchors_render_without_class_paths():
     assert ">UP</text>" in svg
 
 
+def test_semantic_door_anchors_suppress_geometry_path_door_duplicates():
+    profile = load_style_profile()
+    overlay = replace(profile.floor_plan.feature_overlay, doors_enabled=True)
+    profile = replace(profile, floor_plan=replace(profile.floor_plan, feature_overlay=overlay))
+    geometry = GeometrySummary(
+        view_id="floor_plan_01",
+        backend="ifcopenshell-svg-floorplan",
+        cut_candidates={"IfcDoor": 3},
+        projection_candidates={},
+        source_elements=3,
+        path_count=2,
+        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=12.0, max_y=8.0),
+        paths=[
+            VectorPath(
+                role="projection",
+                ifc_class="IfcDoor",
+                points=[Point2D(1.0, 1.0), Point2D(2.0, 1.0)],
+            ),
+            VectorPath(
+                role="projection",
+                ifc_class="IfcDoor",
+                points=[Point2D(9.0, 6.0), Point2D(10.0, 6.0)],
+            ),
+        ],
+        feature_anchors=[
+            FeatureAnchor2D(
+                ifc_class="IfcDoor",
+                anchor=Point2D(5.0, 4.0),
+                dir_x=1.0,
+                dir_y=0.0,
+                source_element="door-1",
+            )
+        ],
+        feature_anchor_counts={"IfcDoor": 1},
+    )
+
+    svg = render_view_svg(_model(), _view(), geometry, profile)
+
+    assert "Feature overlay | Stairs: 0 | Rooms: 0 | Doors: 1" in svg
+    assert svg.count('data-feature="door-arc"') == 1
+
+
 def test_room_label_mode_ifc_name_uses_semantic_label():
     profile = load_style_profile()
     overlay = replace(profile.floor_plan.feature_overlay, room_label_mode="ifc_name")

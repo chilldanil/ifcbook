@@ -30,5 +30,8 @@ ifc-book-benchmark = "ifc_book_prototype.benchmark:main"
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.package-data]
+ifc_book_prototype = ["profiles/*.json"]
+
 [tool.setuptools.packages.find]
 include = ["ifc_book_prototype*"]
