@@ -974,12 +974,18 @@ def _feature_annotations(
     ):
         suffix = " (sampled)"
     if overlay.show_legend:
-        legend = (
-            "Feature overlay | "
-            f"Stairs: {_feature_count_token(overlay.stairs_enabled, stair_total)} | "
-            f"Rooms: {_feature_count_token(overlay.rooms_enabled, room_total)} | "
-            f"Doors: {_feature_count_token(overlay.doors_enabled, door_total)}{suffix}"
-        )
+        # The "Doors" slot tracks our custom overlay only. When that overlay is
+        # off we omit the slot entirely, because the serializer draws door
+        # arcs as part of the linework regardless — printing "Doors: off"
+        # then misleads the reader into thinking there are no doors on the
+        # plan.
+        parts = [
+            f"Stairs: {_feature_count_token(overlay.stairs_enabled, stair_total)}",
+            f"Rooms: {_feature_count_token(overlay.rooms_enabled, room_total)}",
+        ]
+        if overlay.doors_enabled:
+            parts.append(f"Doors: {_feature_count_token(True, door_total)}")
+        legend = "Feature overlay | " + " | ".join(parts) + suffix
         drawing.append(_text(x + 2.0, y + 4.5, legend, 2.8, fill=overlay.legend_color))
     return drawing
 
