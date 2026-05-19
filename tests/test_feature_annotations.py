@@ -294,3 +294,66 @@ def test_room_label_mode_ifc_name_prefers_structured_display_label():
     svg = render_view_svg(_model(), _view(), geometry, profile)
     assert ">A-12 Lobby</text>" in svg
     assert ">Legacy Room</text>" not in svg
+
+
+def test_room_label_mode_keyed_legend_uses_short_plan_tags_and_panel_legend():
+    profile = load_style_profile()
+    overlay = replace(
+        profile.floor_plan.feature_overlay,
+        room_label_mode="keyed_legend",
+        room_label_prefix="R",
+        max_room_legend_entries=2,
+    )
+    floor_plan = replace(profile.floor_plan, feature_overlay=overlay)
+    profile = replace(profile, floor_plan=floor_plan)
+    geometry = GeometrySummary(
+        view_id="floor_plan_01",
+        backend="ifcopenshell-svg-floorplan",
+        cut_candidates={},
+        projection_candidates={},
+        source_elements=3,
+        path_count=0,
+        bounds=Bounds2D(min_x=0.0, min_y=0.0, max_x=20.0, max_y=20.0),
+        paths=[],
+        notes=[f"technical note {index}" for index in range(30)],
+        feature_anchors=[
+            FeatureAnchor2D(
+                ifc_class="IfcSpace",
+                anchor=Point2D(2.0, 2.0),
+                dir_x=1.0,
+                dir_y=0.0,
+                source_element="space-1",
+                display_label="A-12 Lobby",
+                label="Legacy Lobby",
+            ),
+            FeatureAnchor2D(
+                ifc_class="IfcSpace",
+                anchor=Point2D(8.0, 2.0),
+                dir_x=1.0,
+                dir_y=0.0,
+                source_element="space-2",
+                label="Workshop Room",
+            ),
+            FeatureAnchor2D(
+                ifc_class="IfcSpace",
+                anchor=Point2D(14.0, 2.0),
+                dir_x=1.0,
+                dir_y=0.0,
+                source_element="space-3",
+                label="Quiet Room",
+            ),
+        ],
+    )
+
+    svg = render_view_svg(_model(), _view(), geometry, profile)
+
+    assert "Feature overlay | Stairs: 0 | Rooms: 3" in svg
+    assert ">R-001</text>" in svg
+    assert ">R-002</text>" in svg
+    assert ">R-003</text>" in svg
+    assert ">A-12 Lobby</text>" not in svg
+    assert ">Workshop Room</text>" not in svg
+    assert "Room legend" in svg
+    assert "R-001 = A-12 Lobby" in svg
+    assert "R-002 = Workshop Room" in svg
+    assert "+ 1 more rooms in schedules" in svg

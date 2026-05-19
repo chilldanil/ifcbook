@@ -8,6 +8,7 @@ from typing import Iterable
 
 from .bundle_replay import replay_bundle
 from .domain import PipelineManifest
+from .overlay_gate import evaluate_overlay_gate_from_run_dir
 from .pipeline import _slugify
 from .profiles import load_style_profile
 
@@ -29,6 +30,8 @@ class ProfileComparisonItem:
     sheet_sha256: str
     replay_mode: str
     rerendered_view_count: int
+    overlay_gate_status: str
+    overlay_violation_count: int
 
     def as_dict(self) -> dict:
         return {
@@ -44,6 +47,8 @@ class ProfileComparisonItem:
             "sheet_sha256": self.sheet_sha256,
             "replay_mode": self.replay_mode,
             "rerendered_view_count": self.rerendered_view_count,
+            "overlay_gate_status": self.overlay_gate_status,
+            "overlay_violation_count": self.overlay_violation_count,
         }
 
 
@@ -155,7 +160,8 @@ def format_profile_comparison_human(report: ProfileComparisonReport) -> str:
         lines.append(
             f"  {item.profile}: profile_id={item.profile_id} "
             f"sheet_sha256={item.sheet_sha256[:12]} pdf_sha256={item.pdf_sha256[:12]} "
-            f"geometry_sha256={item.geometry_sha256[:12]}"
+            f"geometry_sha256={item.geometry_sha256[:12]} "
+            f"overlay_gate={item.overlay_gate_status}"
         )
     return "\n".join(lines)
 
@@ -171,13 +177,13 @@ def format_profile_comparison_markdown(report: ProfileComparisonReport) -> str:
         f"- sheet_hashes_differ: {str(report.sheet_hashes_differ).lower()}",
         f"- pdf_hashes_differ: {str(report.pdf_hashes_differ).lower()}",
         "",
-        "| profile | profile_id | sheet_sha256 | pdf_sha256 | geometry_sha256 | output_dir |",
-        "|---|---|---|---|---|---|",
+        "| profile | profile_id | overlay_gate | sheet_sha256 | pdf_sha256 | geometry_sha256 | output_dir |",
+        "|---|---|---|---|---|---|---|",
     ]
     for item in report.items:
         lines.append(
             "| "
-            f"{item.profile} | {item.profile_id} | {item.sheet_sha256} | "
+            f"{item.profile} | {item.profile_id} | {item.overlay_gate_status} | {item.sheet_sha256} | "
             f"{item.pdf_sha256} | {item.geometry_sha256} | {item.output_dir} |"
         )
     return "\n".join(lines) + "\n"
@@ -195,6 +201,7 @@ def _comparison_item_from_manifest(
     sheet_path = Path(sheet.svg_path)
     pdf_path = Path(manifest.pdf_path)
     geometry_path = output_dir / "metadata" / "view_linework.json"
+    overlay_gate = evaluate_overlay_gate_from_run_dir(output_dir)
     return ProfileComparisonItem(
         profile=profile_name,
         profile_id=manifest.style_profile_id,
@@ -208,6 +215,8 @@ def _comparison_item_from_manifest(
         sheet_sha256=_sha256_file(sheet_path),
         replay_mode=str(replay.get("mode", "")),
         rerendered_view_count=int(replay.get("rerendered_view_count", 0) or 0),
+        overlay_gate_status="PASS" if overlay_gate.passed else "FAIL",
+        overlay_violation_count=overlay_gate.violation_count,
     )
 
 

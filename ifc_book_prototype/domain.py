@@ -41,6 +41,7 @@ class FeatureOverlayRule:
     room_label_prefix: str = "R"
     room_label_start: int = 1
     room_fixed_label: str = "ROOM"
+    max_room_legend_entries: int = 12
 
 
 @dataclass(frozen=True)

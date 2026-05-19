@@ -54,10 +54,11 @@
       "leader_stroke_width": 0.14,
       "leader_dasharray": "0.9 0.6",
       "stair_label": "UP",
-      "room_label_mode": "ifc_name",
-      "room_label_prefix": "Z",
+      "room_label_mode": "keyed_legend",
+      "room_label_prefix": "R",
       "room_label_start": 1,
-      "room_fixed_label": "ZONE"
+      "room_fixed_label": "ZONE",
+      "max_room_legend_entries": 12
     }
   },
   "sheet_prefix": "A",

@@ -149,6 +149,7 @@ python -m ifc_book_prototype.cli \
 ```
 
 Built-in rerender presets currently include `presentation`, `permit_set`, and `coordination`.
+`permit_set` and `coordination` use short room keys on the plan with a room legend in the sheet notes, while `presentation` keeps direct IFC room names on the plan.
 `--profile` still accepts a direct JSON path when a custom office standard is needed.
 
 To generate a machine-readable proof that the same cached geometry produces different drawings under different profiles:
@@ -162,6 +163,14 @@ python -m ifc_book_prototype.cli \
 ```
 
 This writes `profile_comparison.json` and `profile_comparison.md` with the shared geometry hash plus per-profile SVG/PDF hashes.
+
+Run the overlay QA gate on any generated run directory:
+
+```bash
+python -m ifc_book_prototype.cli --overlay-gate out/profile_compare/coordination
+```
+
+The gate compares rendered overlay counts in SVG sheets against `metadata/view_geometry.json` feature-anchor counts and emits `OVERLAY_GATE_JSON=<json>` for CI parsing.
 
 If `ifcopenshell` is available, the prototype will use it for metadata enrichment and real floor-plan extraction. Otherwise it falls back to SPF scanning only.
 
@@ -205,7 +214,7 @@ Current implementation:
 - capability-driven schedule planning that activates only for IFC content that is actually present,
 - deterministic feature overlays on view sheets (`D` door symbols with swing arcs, `UP` stair arrows, `R-###` room tags) when geometry anchors are available,
 - IFC-semantic feature anchor extraction (door/stair/space placements by storey) now feeds the renderer directly, so overlays are no longer dependent on serializer class-path luck,
-- feature-overlay behavior is style-profile driven (`floor_plan.feature_overlay`): per-feature enable/disable, symbol limits, colors, leader behavior, and room-label policy (`sequential` / `numeric` / `fixed` / `ifc_name`),
+- feature-overlay behavior is style-profile driven (`floor_plan.feature_overlay`): per-feature enable/disable, symbol limits, colors, leader behavior, and room-label policy (`sequential` / `numeric` / `fixed` / `ifc_name` / `keyed_legend`),
 - SVG-first sheet generation with PDF assembled from the generated sheet SVGs,
 - per-view geometry metadata export.
 

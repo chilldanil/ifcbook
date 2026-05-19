@@ -458,7 +458,10 @@ def render_view_svg(
         ("Cut classes", _format_class_counts(geometry.cut_candidates)),
         ("Proj. classes", _format_class_counts(geometry.projection_candidates)),
     ]
-    panel = _bottom_panel(info_lines, geometry.notes, profile)
+    # Room keys are user-facing sheet content; backend telemetry is secondary.
+    panel_notes = _room_key_legend_notes(geometry, profile)
+    panel_notes.extend(geometry.notes)
+    panel = _bottom_panel(info_lines, panel_notes, profile)
     return _wrap_sheet(
         title=view.title,
         sheet_id=view.sheet_id,
@@ -1074,6 +1077,32 @@ def _feature_annotation_counts(geometry: GeometrySummary) -> Dict[str, int]:
     }
 
 
+def _room_key_legend_notes(geometry: GeometrySummary, profile: StyleProfile) -> List[str]:
+    overlay = profile.floor_plan.feature_overlay
+    if not overlay.enabled or not overlay.rooms_enabled:
+        return []
+    if overlay.room_label_mode.strip().lower() != "keyed_legend":
+        return []
+    rooms = _collect_feature_primitives(geometry, overlay)["IfcSpace"]
+    if not rooms:
+        return []
+
+    limit = max(0, int(overlay.max_room_legend_entries))
+    notes = ["Room legend"]
+    for primitive in rooms[:limit]:
+        key = (primitive.label or "").strip()
+        value = (primitive.display_label or "").strip()
+        if not key:
+            continue
+        if value and value != key:
+            notes.append(f"{key} = {value}")
+        else:
+            notes.append(key)
+    if len(rooms) > limit:
+        notes.append(f"+ {len(rooms) - limit} more rooms in schedules")
+    return notes
+
+
 def _viewport_scale(bounds: Bounds2D, width: float, height: float, padding: float = 4.0) -> float:
     """Return the drawing scale in mm/m (sheet-space mm per world-space metre)."""
     world_w = max(bounds.max_x - bounds.min_x, 1.0e-6)
@@ -1257,6 +1286,9 @@ def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -
             label = fixed_label
         elif mode == "ifc_name":
             label = (primitive.display_label or primitive.label or "").strip() or f"{(prefix or 'R')}-{number:03d}"
+        elif mode == "keyed_legend":
+            label_prefix = prefix or "R"
+            label = f"{label_prefix}-{number:03d}"
         elif mode == "numeric":
             label = f"{number:03d}" if not prefix else f"{prefix}-{number:03d}"
         else:
@@ -1271,7 +1303,7 @@ def _label_rooms(spaces: List[_FeaturePrimitive], overlay: FeatureOverlayRule) -
                 length=primitive.length,
                 ifc_class=primitive.ifc_class,
                 label=label,
-                display_label=primitive.display_label,
+                display_label=primitive.display_label or primitive.label,
             )
         )
     return labeled

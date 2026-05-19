@@ -28,3 +28,8 @@ def test_rerender_presets_have_distinct_style_knobs():
     assert presentation.lineweights_mm["cut_primary"] < permit_set.lineweights_mm["cut_primary"]
     assert coordination.lineweights_mm["projected"] > presentation.lineweights_mm["projected"]
     assert coordination.floor_plan.feature_overlay.doors_enabled is True
+    assert presentation.floor_plan.feature_overlay.room_label_mode == "ifc_name"
+    assert permit_set.floor_plan.feature_overlay.room_label_mode == "keyed_legend"
+    assert permit_set.floor_plan.feature_overlay.max_room_legend_entries == 12
+    assert coordination.floor_plan.feature_overlay.room_label_mode == "keyed_legend"
+    assert coordination.floor_plan.feature_overlay.max_room_legend_entries == 12

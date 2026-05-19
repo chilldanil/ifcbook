@@ -6,6 +6,11 @@ from pathlib import Path
 
 from .bundle_replay import replay_bundle
 from .domain import PipelineManifest
+from .overlay_gate import (
+    evaluate_overlay_gate_from_run_dir,
+    format_overlay_gate_human,
+    format_overlay_gate_machine,
+)
 from .pipeline import PrototypePipeline
 from .profiles import available_profile_presets, load_style_profile, resolve_style_profile_path
 from .profile_compare import (
@@ -78,6 +83,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Evaluate metadata/geometry_runtime_summary.json in RUN_DIR against runtime/"
             "fallback thresholds. Returns non-zero on threshold violations."
         ),
+    )
+    parser.add_argument(
+        "--overlay-gate",
+        metavar="RUN_DIR",
+        help=(
+            "Evaluate rendered feature-overlay counts against metadata/view_geometry.json. "
+            "Returns non-zero on count mismatches."
+        ),
+    )
+    parser.add_argument(
+        "--max-overlay-count-delta",
+        type=int,
+        default=0,
+        help="Gate threshold: maximum allowed absolute difference between expected and rendered overlay counts.",
     )
     parser.add_argument(
         "--max-fallback-event-rate",
@@ -246,6 +265,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"RUNTIME_GATE_JSON={format_runtime_gate_machine(result)}")
         return 0 if result.passed else 1
 
+    if args.overlay_gate:
+        try:
+            result = evaluate_overlay_gate_from_run_dir(
+                Path(args.overlay_gate),
+                max_count_delta=args.max_overlay_count_delta,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(format_overlay_gate_human(result))
+        print(f"OVERLAY_GATE_JSON={format_overlay_gate_machine(result)}")
+        return 0 if result.passed else 1
+
     if args.plan_next:
         try:
             plan = create_progress_plan_from_run_root(Path(args.plan_next))
@@ -294,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.out:
         parser.error(
-            "--out is required unless --summarize-runtime, --runtime-gate, --plan-next, or --compare-profiles is used."
+            "--out is required unless --summarize-runtime, --runtime-gate, --overlay-gate, --plan-next, or --compare-profiles is used."
         )
 
     output_dir = Path(args.out)
